@@ -98,8 +98,6 @@ import {
 } from "~backend/document/templates";
 import { updateDocument as api_document_update_updateDocument } from "~backend/document/update";
 import { upload as api_document_upload_upload } from "~backend/document/upload";
-import { listVersions as api_document_versions_list_listVersions } from "~backend/document/versions_list";
-import { getVersion as api_document_versions_get_getVersion } from "~backend/document/versions_get";
 import { spellcheck as api_document_spellcheck_spellcheck } from "~backend/nlp/spellcheck";
 import { translate as api_document_translate_translate } from "~backend/nlp/translate";
 
@@ -116,11 +114,9 @@ export namespace document {
             this.convert = this.convert.bind(this)
             this.get = this.get.bind(this)
             this.getDashboard = this.getDashboard.bind(this)
-            this.getVersion = this.getVersion.bind(this)
             this.list = this.list.bind(this)
             this.listOutputs = this.listOutputs.bind(this)
             this.listTemplates = this.listTemplates.bind(this)
-            this.listVersions = this.listVersions.bind(this)
             this.previewHtml = this.previewHtml.bind(this)
             this.process = this.process.bind(this)
             this.spellcheck = this.spellcheck.bind(this)
@@ -191,15 +187,6 @@ export namespace document {
         }
 
         /**
-         * Gets the document structure for a specific version.
-         */
-        public async getVersion(params: { documentId: string, versionId: string }): Promise<ResponseType<typeof api_document_versions_get_getVersion>> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI(`/documents/${encodeURIComponent(params.documentId)}/versions/${encodeURIComponent(params.versionId)}`, {method: "GET", body: undefined})
-            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_versions_get_getVersion>
-        }
-
-        /**
          * Lists all documents with pagination.
          */
         public async list(params: RequestType<typeof api_document_list_list>): Promise<ResponseType<typeof api_document_list_list>> {
@@ -230,15 +217,6 @@ export namespace document {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/templates`, {method: "GET", body: undefined})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_templates_listTemplates>
-        }
-
-        /**
-         * Lists all available versions for a document.
-         */
-        public async listVersions(params: { documentId: string }): Promise<ResponseType<typeof api_document_versions_list_listVersions>> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI(`/documents/${encodeURIComponent(params.documentId)}/versions`, {method: "GET", body: undefined})
-            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_versions_list_listVersions>
         }
 
         /**
