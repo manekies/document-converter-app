@@ -1,5 +1,6 @@
 import Tesseract from "tesseract.js";
-import type { DocumentElement, DocumentStructure, TableCell } from "../types";
+import sharp from "sharp";
+import type { DocumentElement, DocumentStructure, TableCell, TemplateROI } from "../types";
 import { detectPrimaryLanguageISO1 } from "../utils/lang";
 
 // Advanced OCR + layout analysis using Tesseract.js.
@@ -9,8 +10,13 @@ import { detectPrimaryLanguageISO1 } from "../utils/lang";
 // - Simple table detection by alignment heuristics
 export async function ocrAndStructureFromImage(
   imageBuffer: Buffer,
-  opts?: { lang?: string; langs?: string[] }
+  opts?: { lang?: string; langs?: string[]; rois?: TemplateROI[] }
 ): Promise<{ text: string; structure: DocumentStructure; language: string; confidence: number }> {
+  // If ROIs are provided, perform targeted OCR and skip layout analysis.
+  if (opts?.rois && opts.rois.length > 0) {
+    return ocrWithTemplate(imageBuffer, opts.rois, opts);
+  }
+
   const langArg = buildLangArg(opts?.langs, opts?.lang);
   const res = await Tesseract.recognize(imageBuffer, langArg, {
     tessjs_create_hocr: "1",
@@ -239,4 +245,64 @@ function buildTableFromLines(lines: { content: string }[]): TableCell[][] {
     rows.push(cells.map(text => ({ text, style: {} })));
   }
   return rows;
+}
+
+async function ocrWithTemplate(
+  imageBuffer: Buffer,
+  rois: TemplateROI[],
+  opts?: { lang?: string; langs?: string[] }
+): Promise<{ text: string; structure: DocumentStructure; language:string; confidence: number }> {
+  const langArg = buildLangArg(opts?.langs, opts?.lang);
+  const elements: DocumentElement[] = [];
+  let combinedText = "";
+  let totalConfidence = 0;
+  let confidenceCount = 0;
+
+  for (const roi of rois) {
+    try {
+      // Crop the image to the ROI
+      const croppedBuffer = await sharp(imageBuffer)
+        .extract({ left: roi.x, top: roi.y, width: roi.width, height: roi.height })
+        .toBuffer();
+
+      // Perform OCR on the cropped image
+      const res = await Tesseract.recognize(croppedBuffer, langArg);
+      const text = res.data.text.trim();
+
+      if (text) {
+        combinedText += `${roi.name}: ${text}\n`;
+        elements.push({
+          type: "paragraph",
+          content: text,
+          position: { x: roi.x, y: roi.y, width: roi.width, height: roi.height },
+          style: { "data-field": roi.name } as any, // Custom style property to hold the field name
+        });
+        totalConfidence += res.data.confidence;
+        confidenceCount++;
+      }
+    } catch (error) {
+      console.error(`Failed to process ROI "${roi.name}":`, error);
+    }
+  }
+
+  const imageMetadata = await sharp(imageBuffer).metadata();
+  const structure: DocumentStructure = {
+    elements,
+    metadata: {
+      pageCount: 1,
+      orientation: (imageMetadata.height ?? 842) >= (imageMetadata.width ?? 595) ? "portrait" : "landscape",
+      dimensions: { width: imageMetadata.width ?? 595, height: imageMetadata.height ?? 842 },
+      template: "custom", // Indicate that a template was used
+    },
+  };
+
+  const avgConfidence = confidenceCount > 0 ? totalConfidence / confidenceCount : 0;
+  const detectedLanguage = detectPrimaryLanguageISO1(combinedText) ?? "en";
+
+  return {
+    text: combinedText.trim(),
+    structure,
+    language: detectedLanguage,
+    confidence: avgConfidence,
+  };
 }

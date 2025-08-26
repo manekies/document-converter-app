@@ -3,6 +3,7 @@ import { process as processHandler } from "../process";
 import { documentDB } from "../db";
 import { originalImages, processedDocuments } from "../storage";
 import { processImageToStructure } from "../processors";
+import { findMatchingTemplate } from "../template_matcher";
 
 // Mock dependencies
 vi.mock("../db", () => ({
@@ -23,6 +24,10 @@ vi.mock("../storage", () => ({
 
 vi.mock("../processors", () => ({
   processImageToStructure: vi.fn(),
+}));
+
+vi.mock("../template_matcher", () => ({
+  findMatchingTemplate: vi.fn(),
 }));
 
 const mockSharpInstance = {
@@ -132,5 +137,36 @@ describe("Image Preprocessing Pipeline", () => {
     expect(mockSharpInstance.deskew).toHaveBeenCalledTimes(1);
     expect(mockSharpInstance.denoise).toHaveBeenCalledTimes(1);
     expect(mockSharpInstance.threshold).toHaveBeenCalledTimes(1);
+  });
+
+  describe("with template matching", () => {
+    it("should pass ROIs to the processor if a template is matched", async () => {
+      const mockTemplate = {
+        id: "template1",
+        name: "Test Template",
+        rois: [{ id: "roi1", name: "field1", x: 10, y: 20, width: 100, height: 30 }],
+      };
+      (findMatchingTemplate as any).mockResolvedValue(mockTemplate);
+
+      const req = { documentId: "test-doc-id" };
+      await processHandler(req as any);
+
+      expect(findMatchingTemplate).toHaveBeenCalledTimes(1);
+
+      const processOptions = (processImageToStructure as any).mock.calls[0][2];
+      expect(processOptions).toBeDefined();
+      expect(processOptions.rois).toBe(mockTemplate.rois);
+    });
+
+    it("should not pass ROIs if no template is matched", async () => {
+      (findMatchingTemplate as any).mockResolvedValue(null);
+
+      const req = { documentId: "test-doc-id" };
+      await processHandler(req as any);
+
+      expect(findMatchingTemplate).toHaveBeenCalledTimes(1);
+      const processOptions = (processImageToStructure as any).mock.calls[0][2];
+      expect(processOptions.rois).toBeUndefined();
+    });
   });
 });
