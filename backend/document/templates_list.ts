@@ -7,7 +7,7 @@ interface ListTemplatesResponse {
 }
 
 // Lists all document matching templates.
-export const listTemplates = api<void, ListTemplatesResponse>(
+export const listMatchingTemplates = api<void, ListTemplatesResponse>(
   { expose: true, method: "GET", path: "/document-templates" },
   async () => {
     const result = await documentDB.query<Omit<DocumentMatchingTemplate, "rois">>`
