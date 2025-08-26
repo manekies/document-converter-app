@@ -14,6 +14,12 @@ try {
   sharp = null;
 }
 
+interface PreprocessingOptions {
+  deskew?: boolean;
+  denoise?: boolean;
+  binarize?: boolean;
+}
+
 interface ProcessRequest {
   documentId: string;
   // Processing orchestration options
@@ -21,6 +27,8 @@ interface ProcessRequest {
   quality?: "fast" | "best";
   // Optional preferred OCR languages (Tesseract codes like "eng", "rus", "deu"), multi-language supported via "+"
   languages?: string[];
+  // Optional image preprocessing steps
+  preprocessing?: PreprocessingOptions;
 }
 
 // Processes an uploaded document image to extract text and structure.
@@ -62,7 +70,20 @@ export const process = api<ProcessRequest, ProcessingResult>(
       // Preprocess image (denoise, normalize, increase contrast) to improve OCR
       if (sharp) {
         try {
-          imageBuffer = await sharp(imageBuffer)
+          let sharpInstance = sharp(imageBuffer);
+
+          // Apply conditional preprocessing steps
+          if (req.preprocessing?.deskew) {
+            sharpInstance = sharpInstance.deskew();
+          }
+          if (req.preprocessing?.denoise) {
+            sharpInstance = sharpInstance.denoise();
+          }
+          if (req.preprocessing?.binarize) {
+            sharpInstance = sharpInstance.threshold(); // Binarization
+          }
+
+          imageBuffer = await sharpInstance
             .toColorspace("b-w")
             .linear(1.2, -10) // increase contrast slightly
             .sharpen()
