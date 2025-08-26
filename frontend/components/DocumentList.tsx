@@ -1,30 +1,119 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { FileText, Clock, CheckCircle, XCircle, Eye } from "lucide-react";
+import { FileText, Clock, CheckCircle, XCircle, Eye, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { Document } from "~backend/document/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/components/ui/use-toast";
+import type { Document, OutputFormat } from "~backend/document/types";
+import backend from "~backend/client";
 
 interface DocumentListProps {
   documents: Document[];
 }
 
 export function DocumentList({ documents }: DocumentListProps) {
-  if (documents.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
-        <p className="text-gray-600 mb-6">Upload your first image to get started</p>
-        <Link to="/">
-          <Button>Upload Document</Button>
-        </Link>
-      </div>
-    );
-  }
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [format, setFormat] = useState<OutputFormat>("pdf");
+  const [mode, setMode] = useState<"exact" | "editable">("editable");
+  const [running, setRunning] = useState(false);
+  const { toast } = useToast();
+
+  const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+  const allSelected = selectedIds.length > 0 && selectedIds.length === documents.length;
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => ({ ...s, [id]: !s[id] }));
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelected({});
+    } else {
+      const map: Record<string, boolean> = {};
+      for (const d of documents) map[d.id] = true;
+      setSelected(map);
+    }
+  };
+
+  const runBatch = async () => {
+    if (selectedIds.length === 0) return;
+    setRunning(true);
+    try {
+      const res = await backend.document.batchProcess({
+        documentIds: selectedIds,
+        convertTo: format,
+        mode,
+      });
+      const ok = res.results.filter((r) => r.status === "completed").length;
+      toast({
+        title: "Batch complete",
+        description: `${ok}/${selectedIds.length} completed`,
+      });
+      // Open downloads for completed conversions
+      for (const r of res.results) {
+        if (r.conversion?.downloadUrl) window.open(r.conversion.downloadUrl, "_blank");
+      }
+    } catch (err) {
+      console.error("Batch error:", err);
+      toast({
+        title: "Batch failed",
+        description: "Some or all items failed to process.",
+        variant: "destructive",
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
+        <button
+          onClick={toggleSelectAll}
+          className="flex items-center text-sm text-gray-700"
+          aria-label="Toggle select all"
+        >
+          {allSelected ? <CheckSquare className="h-4 w-4 mr-2" /> : <Square className="h-4 w-4 mr-2" />}
+          Select all
+        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Select value={format} onValueChange={(v) => setFormat(v as OutputFormat)}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Format" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pdf">PDF</SelectItem>
+              <SelectItem value="docx">DOCX</SelectItem>
+              <SelectItem value="html">HTML</SelectItem>
+              <SelectItem value="markdown">Markdown</SelectItem>
+              <SelectItem value="txt">TXT</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={mode} onValueChange={(v) => setMode(v as "exact" | "editable")}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="editable">Editable</SelectItem>
+              <SelectItem value="exact">Exact</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={runBatch} disabled={running || selectedIds.length === 0}>
+            {running ? "Processing..." : `Convert ${selectedIds.length}`}
+          </Button>
+        </div>
+      </div>
+
+      {documents.length === 0 ? (
+        <div className="text-center py-12">
+          <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
+          <p className="text-gray-600 mb-6">Upload your first image to get started</p>
+        </div>
+      ) : null}
+
       {documents.map((document) => (
         <div
           key={document.id}
@@ -32,6 +121,17 @@ export function DocumentList({ documents }: DocumentListProps) {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
+              <button
+                onClick={() => toggleSelect(document.id)}
+                className="text-gray-600"
+                aria-label="Toggle select"
+              >
+                {selected[document.id] ? (
+                  <CheckSquare className="h-5 w-5" />
+                ) : (
+                  <Square className="h-5 w-5" />
+                )}
+              </button>
               <div className="flex-shrink-0">
                 <FileText className="h-8 w-8 text-gray-400" />
               </div>

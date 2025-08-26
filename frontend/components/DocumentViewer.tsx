@@ -1,12 +1,12 @@
-import React, { useState } from "react";
-import { Download, FileText, Eye, Edit, RefreshCw } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Download, FileText, Eye, Edit, RefreshCw, Code } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { ConversionPanel } from "./ConversionPanel";
+import { DocumentEditor } from "./DocumentEditor";
 import type { Document } from "~backend/document/types";
 import backend from "~backend/client";
 
@@ -16,17 +16,17 @@ interface DocumentViewerProps {
 
 export function DocumentViewer({ document }: DocumentViewerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [doc, setDoc] = useState(document);
   const { toast } = useToast();
 
   const handleReprocess = async () => {
     setIsProcessing(true);
     try {
-      await backend.document.process({ documentId: document.id });
+      await backend.document.process({ documentId: doc.id });
       toast({
         title: "Reprocessing started",
         description: "Your document is being reprocessed.",
       });
-      // In a real app, you'd refresh the document data
     } catch (error) {
       console.error("Reprocess error:", error);
       toast({
@@ -39,6 +39,35 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
     }
   };
 
+  const htmlPreview = useMemo(() => {
+    if (!doc.documentStructure) return null;
+    // Inline simple renderer
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      body{font-family:system-ui, Arial, sans-serif;margin:0;padding:16px;line-height:1.6;color:#111827}
+      h1,h2,h3,h4,h5,h6{margin:1em 0 .5em}
+      p{margin:.5em 0}
+      ul{margin:.5em 0 .5em 1.25em}
+      li{margin:.25em 0}
+    </style></head><body>`;
+    for (const el of doc.documentStructure.elements) {
+      if (el.type === "heading") {
+        const lvl = Math.min(el.level ?? 2, 6);
+        html += `<h${lvl}>${escapeHtml(el.content)}</h${lvl}>`;
+      } else if (el.type === "list") {
+        const items = el.content.split("\n").filter(i => i.trim());
+        html += "<ul>";
+        for (const it of items) {
+          html += `<li>${escapeHtml(it.replace(/^[•\\-\\*\\u2022]\\s*/, ""))}</li>`;
+        }
+        html += "</ul>";
+      } else {
+        html += `<p>${escapeHtml(el.content)}</p>`;
+      }
+    }
+    html += "</body></html>";
+    return html;
+  }, [doc.documentStructure]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -48,22 +77,22 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
             <FileText className="h-8 w-8 text-gray-400" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {document.originalFilename}
+                {doc.originalFilename}
               </h1>
               <div className="flex items-center space-x-4 mt-1">
-                <StatusBadge status={document.processingStatus} />
+                <StatusBadge status={doc.processingStatus} />
                 <span className="text-sm text-gray-500">
-                  {formatFileSize(document.fileSize)}
+                  {formatFileSize(doc.fileSize)}
                 </span>
                 <span className="text-sm text-gray-500">
-                  {formatDate(document.createdAt)}
+                  {formatDate(doc.createdAt)}
                 </span>
               </div>
             </div>
           </div>
           
           <div className="flex items-center space-x-2">
-            {document.processingStatus === "failed" && (
+            {doc.processingStatus === "failed" && (
               <Button
                 variant="outline"
                 onClick={handleReprocess}
@@ -80,60 +109,87 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
           </div>
         </div>
 
-        {document.detectedLanguage && (
+        {doc.detectedLanguage && (
           <div className="text-sm text-gray-600">
-            <strong>Detected Language:</strong> {document.detectedLanguage.toUpperCase()}
+            <strong>Detected Language:</strong> {doc.detectedLanguage.toUpperCase()}
           </div>
         )}
       </div>
 
       {/* Content */}
-      {document.processingStatus === "completed" && document.extractedText ? (
+      {doc.processingStatus === "completed" && (doc.extractedText || doc.documentStructure) ? (
         <Tabs defaultValue="preview" className="space-y-6">
           <TabsList>
             <TabsTrigger value="preview">
               <Eye className="h-4 w-4 mr-2" />
               Preview
             </TabsTrigger>
+            <TabsTrigger value="edit">
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </TabsTrigger>
             <TabsTrigger value="convert">
               <Download className="h-4 w-4 mr-2" />
               Convert & Download
             </TabsTrigger>
+            <TabsTrigger value="raw">
+              <Code className="h-4 w-4 mr-2" />
+              Raw
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="preview" className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-lg p-0 overflow-hidden">
+              {htmlPreview ? (
+                <iframe
+                  title="Preview"
+                  className="w-full h-[480px] bg-white"
+                  srcDoc={htmlPreview}
+                />
+              ) : (
+                <div className="p-6 text-gray-600">No structure available to preview.</div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="edit">
+            <DocumentEditor
+              document={doc}
+              onSaved={async () => {
+                // Reload latest
+                const fresh = await backend.document.get({ id: doc.id });
+                setDoc(fresh);
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="convert">
+            <ConversionPanel document={doc} />
+          </TabsContent>
+
+          <TabsContent value="raw" className="space-y-6">
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Extracted Text</h2>
               <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
                 <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">
-                  {document.extractedText}
+                  {doc.extractedText}
                 </pre>
               </div>
             </div>
 
-            {document.documentStructure && (
+            {doc.documentStructure && (
               <div className="bg-white border border-gray-200 rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Document Structure</h2>
-                <div className="space-y-2">
-                  <div className="text-sm text-gray-600">
-                    <strong>Elements:</strong> {document.documentStructure.elements.length}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <strong>Pages:</strong> {document.documentStructure.metadata.pageCount}
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <strong>Orientation:</strong> {document.documentStructure.metadata.orientation}
-                  </div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Document Structure (JSON)</h2>
+                <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                  <pre className="whitespace-pre text-xs text-gray-700">
+                    {JSON.stringify(doc.documentStructure, null, 2)}
+                  </pre>
                 </div>
               </div>
             )}
           </TabsContent>
-
-          <TabsContent value="convert">
-            <ConversionPanel document={document} />
-          </TabsContent>
         </Tabs>
-      ) : document.processingStatus === "processing" ? (
+      ) : doc.processingStatus === "processing" ? (
         <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
           <LoadingSpinner className="mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Processing Document</h2>
@@ -141,7 +197,7 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
             We're extracting text and analyzing the structure of your document. This may take a few moments.
           </p>
         </div>
-      ) : document.processingStatus === "failed" ? (
+      ) : doc.processingStatus === "failed" ? (
         <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
           <div className="text-red-500 mb-4">
             <FileText className="h-12 w-12 mx-auto" />
@@ -207,4 +263,8 @@ function formatDate(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

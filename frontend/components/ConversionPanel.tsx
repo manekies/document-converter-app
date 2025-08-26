@@ -72,7 +72,7 @@ export function ConversionPanel({ document }: ConversionPanelProps) {
           </Label>
           <Select value={format} onValueChange={(value) => setFormat(value as OutputFormat)}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder="Select format" />
             </SelectTrigger>
             <SelectContent>
               {formatOptions.map((option) => {

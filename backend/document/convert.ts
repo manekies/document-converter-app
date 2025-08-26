@@ -1,57 +1,121 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { documentDB } from "./db";
 import { processedDocuments } from "./storage";
-import type { ConversionRequest, ConversionResponse, Document, DocumentStructure } from "./types";
+import type { ConversionRequest, ConversionResponse, DocumentStructure } from "./types";
+import { generateHTML } from "./exporters/html";
+import { generateMarkdown } from "./exporters/markdown";
+import { generateDocx } from "./exporters/docx";
+import { generatePdf } from "./exporters/pdf";
 
 // Converts a processed document to the specified format.
 export const convert = api<ConversionRequest, ConversionResponse>(
   { expose: true, method: "POST", path: "/document/convert" },
   async (req) => {
+    // Validate req
+    if (!req.documentId) {
+      throw APIError.invalidArgument("missing documentId");
+    }
+
     // Get document
     const document = await documentDB.queryRow<{
       id: string;
-      extracted_text: string;
-      document_structure: string;
+      extracted_text: string | null;
+      document_structure: string | null;
       processing_status: string;
+      original_filename: string;
     }>`
-      SELECT id, extracted_text, document_structure, processing_status
+      SELECT id, extracted_text, document_structure, processing_status, original_filename
       FROM documents
       WHERE id = ${req.documentId}
     `;
 
     if (!document) {
-      throw new Error("Document not found");
+      throw APIError.notFound("document not found");
     }
 
     if (document.processing_status !== "completed") {
-      throw new Error("Document processing not completed");
+      throw APIError.failedPrecondition("document processing not completed");
     }
 
-    const documentStructure: DocumentStructure = JSON.parse(document.document_structure);
+    if (!document.document_structure && !document.extracted_text) {
+      throw APIError.failedPrecondition("no content to convert");
+    }
 
-    // Generate document content based on format and mode
-    const content = await generateDocument(
-      document.extracted_text,
-      documentStructure,
-      req.format,
-      req.mode
-    );
+    const documentStructure: DocumentStructure | undefined = document.document_structure
+      ? JSON.parse(document.document_structure)
+      : undefined;
+
+    // Generate content based on format and mode
+    let buffer: Buffer;
+    let contentType: string;
+    let ext = req.format;
+
+    switch (req.format) {
+      case "txt": {
+        const text = document.extracted_text ?? "";
+        buffer = Buffer.from(text, "utf8");
+        contentType = "text/plain; charset=utf-8";
+        break;
+      }
+      case "markdown": {
+        const md = generateMarkdown(
+          documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
+          req.mode
+        );
+        buffer = Buffer.from(md, "utf8");
+        contentType = "text/markdown; charset=utf-8";
+        ext = "md";
+        break;
+      }
+      case "html": {
+        const html = generateHTML(
+          documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
+          req.mode
+        );
+        buffer = Buffer.from(html, "utf8");
+        contentType = "text/html; charset=utf-8";
+        break;
+      }
+      case "docx": {
+        const docx = await generateDocx(
+          documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
+          req.mode
+        );
+        buffer = docx;
+        contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        break;
+      }
+      case "pdf": {
+        const pdf = await generatePdf(
+          documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
+          req.mode
+        );
+        buffer = pdf;
+        contentType = "application/pdf";
+        break;
+      }
+      default:
+        throw APIError.invalidArgument(`unsupported format: ${req.format}`);
+    }
 
     // Save to storage
-    const filename = `${req.documentId}_${req.mode}.${req.format}`;
-    const filePath = `converted/${filename}`;
-    
-    await processedDocuments.upload(filePath, Buffer.from(content));
+    const safeBase = document.original_filename.replace(/\.[^.]+$/, "");
+    const filename = `${safeBase}_${req.mode}.${ext}`;
+    const filePath = `converted/${req.documentId}/${filename}`;
+
+    await processedDocuments.upload(filePath, buffer, {
+      contentType,
+    });
 
     // Create output record
     const output = await documentDB.queryRow<{ id: string }>`
       INSERT INTO document_outputs (document_id, format, file_path, file_size)
-      VALUES (${req.documentId}, ${req.format}, ${filePath}, ${content.length})
+      VALUES (${req.documentId}, ${req.format}, ${filePath}, ${buffer.length})
       RETURNING id
     `;
 
     if (!output) {
-      throw new Error("Failed to create output record");
+      throw APIError.internal("failed to create output record");
     }
 
     // Generate download URL
@@ -64,118 +128,38 @@ export const convert = api<ConversionRequest, ConversionResponse>(
   }
 );
 
-async function generateDocument(
-  extractedText: string,
-  structure: DocumentStructure,
-  format: string,
-  mode: "exact" | "editable"
-): Promise<string> {
-  switch (format) {
-    case "txt":
-      return extractedText;
-
-    case "markdown":
-      return generateMarkdown(structure, mode);
-
-    case "html":
-      return generateHTML(structure, mode);
-
-    case "docx":
-      // In a real implementation, this would use a library like docx
-      return generateDocxPlaceholder(structure, mode);
-
-    case "pdf":
-      // In a real implementation, this would use a library like PDFKit
-      return generatePdfPlaceholder(structure, mode);
-
-    default:
-      throw new Error(`Unsupported format: ${format}`);
-  }
-}
-
-function generateMarkdown(structure: DocumentStructure, mode: string): string {
-  let markdown = "";
-
-  for (const element of structure.elements) {
-    switch (element.type) {
-      case "heading":
-        const level = element.level || 1;
-        markdown += `${"#".repeat(level)} ${element.content}\n\n`;
-        break;
-
-      case "paragraph":
-        markdown += `${element.content}\n\n`;
-        break;
-
-      case "list":
-        const listItems = element.content.split("\n").filter(item => item.trim());
-        for (const item of listItems) {
-          markdown += `${item}\n`;
-        }
-        markdown += "\n";
-        break;
-
-      default:
-        markdown += `${element.content}\n\n`;
+// Fallback structure builder when only text exists.
+function fallbackStructureFromText(text: string): DocumentStructure {
+  const lines = text.split(/\r?\n/).map(l => l.trim());
+  const elements = [];
+  for (const l of lines) {
+    if (!l) continue;
+    if (/^[#\-\*\u2022]/.test(l) || /^\d+[\.\)]/.test(l)) {
+      elements.push({
+        type: "list",
+        content: l,
+        position: { x: 50, y: 50, width: 500, height: 14 },
+        style: { fontSize: 12 },
+      });
+    } else if (/[:：]$/.test(l) || (l.length < 40 && /[A-Z]/.test(l) && l === l.toUpperCase())) {
+      elements.push({
+        type: "heading",
+        content: l.replace(/[:：]$/, ""),
+        level: 2,
+        position: { x: 50, y: 50, width: 500, height: 20 },
+        style: { fontSize: 18, fontWeight: "bold" },
+      });
+    } else {
+      elements.push({
+        type: "paragraph",
+        content: l,
+        position: { x: 50, y: 50, width: 500, height: 14 },
+        style: { fontSize: 12 },
+      });
     }
   }
-
-  return markdown;
-}
-
-function generateHTML(structure: DocumentStructure, mode: string): string {
-  let html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Converted Document</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-    h1 { font-size: 24px; margin-bottom: 20px; }
-    h2 { font-size: 18px; margin-bottom: 15px; }
-    p { margin-bottom: 15px; }
-    ul { margin-bottom: 15px; }
-  </style>
-</head>
-<body>
-`;
-
-  for (const element of structure.elements) {
-    switch (element.type) {
-      case "heading":
-        const level = Math.min(element.level || 1, 6);
-        html += `<h${level}>${element.content}</h${level}>\n`;
-        break;
-
-      case "paragraph":
-        html += `<p>${element.content}</p>\n`;
-        break;
-
-      case "list":
-        html += "<ul>\n";
-        const listItems = element.content.split("\n").filter(item => item.trim());
-        for (const item of listItems) {
-          const cleanItem = item.replace(/^[•\-\*]\s*/, "");
-          html += `<li>${cleanItem}</li>\n`;
-        }
-        html += "</ul>\n";
-        break;
-
-      default:
-        html += `<p>${element.content}</p>\n`;
-    }
-  }
-
-  html += "</body>\n</html>";
-  return html;
-}
-
-function generateDocxPlaceholder(structure: DocumentStructure, mode: string): string {
-  // This would use a library like 'docx' to generate actual DOCX files
-  return `DOCX content placeholder for ${structure.elements.length} elements in ${mode} mode`;
-}
-
-function generatePdfPlaceholder(structure: DocumentStructure, mode: string): string {
-  // This would use a library like 'PDFKit' to generate actual PDF files
-  return `PDF content placeholder for ${structure.elements.length} elements in ${mode} mode`;
+  return {
+    elements,
+    metadata: { pageCount: 1, orientation: "portrait", dimensions: { width: 595, height: 842 } },
+  };
 }

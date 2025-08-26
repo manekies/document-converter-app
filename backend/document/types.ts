@@ -72,3 +72,51 @@ export interface ConversionResponse {
   outputId: string;
   downloadUrl: string;
 }
+
+export interface UpdateDocumentRequest {
+  id: string;
+  extractedText?: string;
+  documentStructure?: DocumentStructure;
+}
+
+export interface UpdateDocumentResponse {
+  id: string;
+  updatedAt: Date;
+}
+
+export interface PreviewRequest {
+  id: string;
+  mode?: "exact" | "editable";
+}
+
+export interface PreviewResponse {
+  html: string;
+}
+
+export interface BatchProcessRequest {
+  documentIds: string[];
+  convertTo?: OutputFormat;
+  mode?: "exact" | "editable";
+}
+
+export interface BatchProcessItemResult {
+  documentId: string;
+  status: ProcessingStatus;
+  error?: string;
+  conversion?: {
+    outputId: string;
+    downloadUrl: string;
+  };
+}
+
+export interface BatchProcessResponse {
+  results: BatchProcessItemResult[];
+}
+
+export interface ListOutputsRequest {
+  documentId: string;
+}
+
+export interface ListOutputsResponse {
+  outputs: DocumentOutput[];
+}
