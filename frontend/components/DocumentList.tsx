@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/use-toast";
 import type { Document, OutputFormat } from "~backend/document/types";
 import backend from "~backend/client";
+import { BatchProgressDialog } from "./BatchProgressDialog";
 
 interface DocumentListProps {
   documents: Document[];
@@ -17,6 +18,7 @@ export function DocumentList({ documents }: DocumentListProps) {
   const [format, setFormat] = useState<OutputFormat>("pdf");
   const [mode, setMode] = useState<"exact" | "editable">("editable");
   const [running, setRunning] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
   const { toast } = useToast();
 
   const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
@@ -40,20 +42,8 @@ export function DocumentList({ documents }: DocumentListProps) {
     if (selectedIds.length === 0) return;
     setRunning(true);
     try {
-      const res = await backend.document.batchProcess({
-        documentIds: selectedIds,
-        convertTo: format,
-        mode,
-      });
-      const ok = res.results.filter((r) => r.status === "completed").length;
-      toast({
-        title: "Batch complete",
-        description: `${ok}/${selectedIds.length} completed`,
-      });
-      // Open downloads for completed conversions
-      for (const r of res.results) {
-        if (r.conversion?.downloadUrl) window.open(r.conversion.downloadUrl, "_blank");
-      }
+      // Prefer streaming progress
+      setShowDialog(true);
     } catch (err) {
       console.error("Batch error:", err);
       toast({
@@ -168,6 +158,14 @@ export function DocumentList({ documents }: DocumentListProps) {
           </div>
         </div>
       ))}
+
+      <BatchProgressDialog
+        open={showDialog}
+        onClose={() => setShowDialog(false)}
+        documentIds={selectedIds}
+        format={format}
+        mode={mode}
+      />
     </div>
   );
 }

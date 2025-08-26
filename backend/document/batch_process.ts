@@ -7,11 +7,16 @@ import { generateDocx } from "./exporters/docx";
 import { generatePdf } from "./exporters/pdf";
 import { generateHTML } from "./exporters/html";
 import { generateMarkdown } from "./exporters/markdown";
+import { loadTemplate } from "./exporters/templates";
+import { loadFonts } from "./style/fonts";
 
 // Batch processes multiple documents and optionally converts them.
 export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
   { expose: true, method: "POST", path: "/documents/batch/process" },
   async (req) => {
+    const template = await loadTemplate(req.template);
+    const fonts = await loadFonts(req.fontFamily);
+
     const results = await Promise.all(
       req.documentIds.map(async (id) => {
         const started = Date.now();
@@ -83,17 +88,17 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
 
           switch (req.convertTo) {
             case "docx":
-              buffer = await generateDocx(structure, req.mode ?? "editable", assetLoader);
+              buffer = await generateDocx(structure, req.mode ?? "editable", assetLoader, template);
               contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
               break;
             case "pdf": {
               const bgImage = req.mode === "exact" ? imageBuffer : undefined;
-              buffer = await generatePdf(structure, req.mode ?? "editable", { backgroundImage: bgImage, assetLoader });
+              buffer = await generatePdf(structure, req.mode ?? "editable", { backgroundImage: bgImage, assetLoader, fonts, template });
               contentType = "application/pdf";
               break;
             }
             case "html": {
-              const html = await generateHTML(structure, req.mode ?? "editable", assetLoader);
+              const html = await generateHTML(structure, req.mode ?? "editable", assetLoader, { template });
               buffer = Buffer.from(html, "utf8");
               contentType = "text/html; charset=utf-8";
               break;

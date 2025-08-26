@@ -10,14 +10,15 @@ import {
   ImageRun,
   AlignmentType
 } from "docx";
-import type { DocumentElement, DocumentStructure, DocumentStyle, TableCell } from "../types";
+import type { DocumentElement, DocumentStructure, DocumentStyle, TableCell, TemplateStyles } from "../types";
 
 type AssetLoader = (src: string) => Promise<Buffer | null>;
 
 export async function generateDocx(
   structure: DocumentStructure,
   mode: "exact" | "editable",
-  assetLoader?: AssetLoader
+  assetLoader?: AssetLoader,
+  template?: TemplateStyles
 ): Promise<Buffer> {
   const children: (Paragraph | DocxTable)[] = [];
 
@@ -52,7 +53,7 @@ export async function generateDocx(
         const clean = item.replace(/^[•\-\*\u2022]\s*/, "");
         children.push(
           new Paragraph({
-            children: [styleRun(clean, el.style)],
+            children: [styleRun(clean, mergedStyle(el.style, template?.list))],
             bullet: { level: 0 },
             alignment: alignmentFromStyle(el.style),
             spacing: mode === "exact" ? { line: lineHeightToTwips(el.style.lineHeight) } : undefined,
@@ -63,9 +64,10 @@ export async function generateDocx(
     }
     if (el.type === "heading") {
       const level = Math.min(el.level || 2, 6);
+      const headingStyle = headingStyleForLevel(template, level);
       children.push(
         new Paragraph({
-          children: [styleRun(el.content, { ...el.style, fontWeight: "bold" })],
+          children: [styleRun(el.content, mergedStyle({ ...el.style, fontWeight: "bold" }, headingStyle))],
           heading:
             level === 1 ? HeadingLevel.HEADING_1 :
             level === 2 ? HeadingLevel.HEADING_2 :
@@ -82,7 +84,7 @@ export async function generateDocx(
     // paragraph / formula
     children.push(
       new Paragraph({
-        children: [styleRun(el.content, el.style)],
+        children: [styleRun(el.content, mergedStyle(el.style, template?.paragraph))],
         alignment: alignmentFromStyle(el.style),
         spacing: mode === "exact" ? { line: lineHeightToTwips(el.style.lineHeight) } : undefined,
       })
@@ -99,6 +101,20 @@ export async function generateDocx(
   });
   const buffer = await Packer.toBuffer(doc);
   return buffer;
+}
+
+function mergedStyle(base?: DocumentStyle, extra?: Partial<DocumentStyle>): DocumentStyle {
+  return { ...(extra ?? {}), ...(base ?? {}) };
+}
+
+function headingStyleForLevel(tpl: TemplateStyles | undefined, level: number): Partial<DocumentStyle> | undefined {
+  if (!tpl?.headings) return undefined;
+  if (level === 1) return tpl.headings.h1;
+  if (level === 2) return tpl.headings.h2;
+  if (level === 3) return tpl.headings.h3;
+  if (level === 4) return tpl.headings.h4;
+  if (level === 5) return tpl.headings.h5;
+  return tpl.headings.h6;
 }
 
 function styleRun(text: string, style?: DocumentStyle): TextRun {

@@ -1,9 +1,18 @@
 import { api, APIError } from "encore.dev/api";
 import { documentDB } from "./db";
-import { originalImages } from "./storage";
+import { originalImages, processedDocuments } from "./storage";
 import { processImageToStructure } from "./processors";
-import type { ProcessingResult } from "./types";
+import type { ProcessingResult, DocumentStructure, DocumentElement } from "./types";
 import type { OrchestratorOptions } from "./orchestrator/router";
+
+// Optional sharp for image preprocessing/extraction
+let sharp: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  sharp = require("sharp");
+} catch {
+  sharp = null;
+}
 
 interface ProcessRequest {
   documentId: string;
@@ -47,9 +56,22 @@ export const process = api<ProcessRequest, ProcessingResult>(
       }
 
       // Download the image
-      const imageBuffer = await originalImages.download(
-        `${document.id}/${document.original_filename}`
-      );
+      const imagePath = `${document.id}/${document.original_filename}`;
+      let imageBuffer = await originalImages.download(imagePath);
+
+      // Preprocess image (denoise, normalize, increase contrast) to improve OCR
+      if (sharp) {
+        try {
+          imageBuffer = await sharp(imageBuffer)
+            .toColorspace("b-w")
+            .linear(1.2, -10) // increase contrast slightly
+            .sharpen()
+            .normalize()
+            .toBuffer();
+        } catch {
+          // ignore preprocessing failure
+        }
+      }
 
       const options: OrchestratorOptions = {
         mode: req.mode ?? "auto",
@@ -64,6 +86,31 @@ export const process = api<ProcessRequest, ProcessingResult>(
         options
       );
 
+      // Optional: generate a preview asset and embed image element for structure preservation
+      let enrichedStructure: DocumentStructure = structure;
+      try {
+        if (sharp) {
+          const preview = await sharp(imageBuffer).jpeg({ quality: 80 }).toBuffer();
+          const assetPath = `assets/${req.documentId}/page1.jpg`;
+          await processedDocuments.upload(assetPath, preview, { contentType: "image/jpeg" });
+
+          const imgElement: DocumentElement = {
+            type: "image",
+            content: "Page image",
+            imageSrc: assetPath,
+            imageWidth: enrichedStructure.metadata.dimensions.width,
+            imageHeight: enrichedStructure.metadata.dimensions.height,
+            position: { x: 0, y: 0, width: enrichedStructure.metadata.dimensions.width, height: enrichedStructure.metadata.dimensions.height },
+            style: {},
+          };
+
+          // Place the image at the beginning to be available for export in flow mode if desired
+          enrichedStructure = { ...enrichedStructure, elements: [imgElement, ...enrichedStructure.elements] };
+        }
+      } catch {
+        // ignore embedding failures
+      }
+
       // Update document with results
       await documentDB.exec`
         UPDATE documents 
@@ -71,7 +118,7 @@ export const process = api<ProcessRequest, ProcessingResult>(
           processing_status = 'completed',
           extracted_text = ${text},
           detected_language = ${language},
-          document_structure = ${JSON.stringify(structure)},
+          document_structure = ${JSON.stringify(enrichedStructure)},
           updated_at = NOW()
         WHERE id = ${req.documentId}
       `;
@@ -87,7 +134,7 @@ export const process = api<ProcessRequest, ProcessingResult>(
         status: "completed",
         extractedText: text,
         detectedLanguage: language,
-        documentStructure: structure,
+        documentStructure: enrichedStructure,
       };
     } catch (error) {
       const duration = Date.now() - started;

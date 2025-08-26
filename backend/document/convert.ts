@@ -6,6 +6,8 @@ import { generateHTML } from "./exporters/html";
 import { generateMarkdown } from "./exporters/markdown";
 import { generateDocx } from "./exporters/docx";
 import { generatePdf } from "./exporters/pdf";
+import { loadTemplate } from "./exporters/templates";
+import { loadFonts } from "./style/fonts";
 
 // Converts a processed document to the specified format.
 export const convert = api<ConversionRequest, ConversionResponse>(
@@ -23,8 +25,9 @@ export const convert = api<ConversionRequest, ConversionResponse>(
       document_structure: string | null;
       processing_status: string;
       original_filename: string;
+      mime_type: string;
     }>`
-      SELECT id, extracted_text, document_structure, processing_status, original_filename
+      SELECT id, extracted_text, document_structure, processing_status, original_filename, mime_type
       FROM documents
       WHERE id = ${req.documentId}
     `;
@@ -44,6 +47,9 @@ export const convert = api<ConversionRequest, ConversionResponse>(
     const documentStructure: DocumentStructure | undefined = document.document_structure
       ? JSON.parse(document.document_structure)
       : undefined;
+
+    const template = await loadTemplate(req.template ?? documentStructure?.metadata.template);
+    const fonts = await loadFonts(req.fontFamily ?? documentStructure?.metadata.fontFamily);
 
     // Asset loader for images referenced in structure.
     const assetLoader = async (src: string) => {
@@ -85,10 +91,14 @@ export const convert = api<ConversionRequest, ConversionResponse>(
         break;
       }
       case "html": {
+        const bgImage = req.mode === "exact"
+          ? await originalImages.download(`${req.documentId}/${document.original_filename}`).catch(() => undefined)
+          : undefined;
         const html = await generateHTML(
           documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
           req.mode,
-          assetLoader
+          assetLoader,
+          { template, backgroundImage: bgImage }
         );
         buffer = Buffer.from(html, "utf8");
         contentType = "text/html; charset=utf-8";
@@ -98,7 +108,8 @@ export const convert = api<ConversionRequest, ConversionResponse>(
         const docx = await generateDocx(
           documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
           req.mode,
-          assetLoader
+          assetLoader,
+          template
         );
         buffer = docx;
         contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -111,7 +122,7 @@ export const convert = api<ConversionRequest, ConversionResponse>(
         const pdf = await generatePdf(
           documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
           req.mode,
-          { backgroundImage: bgImage, assetLoader }
+          { backgroundImage: bgImage, assetLoader, fonts, template }
         );
         buffer = pdf;
         contentType = "application/pdf";

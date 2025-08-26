@@ -1,27 +1,30 @@
 import type { DocumentStructure, DocumentElement } from "../types";
+import { cssFromTemplate, loadTemplate } from "./templates";
 
 type AssetLoader = (src: string) => Promise<Buffer | null>;
+
+interface HtmlOptions {
+  template?: string;
+  backgroundImage?: Buffer;
+}
 
 export async function generateHTML(
   structure: DocumentStructure,
   mode: "exact" | "editable",
-  assetLoader?: AssetLoader
+  assetLoader?: AssetLoader,
+  opts?: HtmlOptions
 ): Promise<string> {
+  const template = await loadTemplate(opts?.template ?? structure.metadata.template);
+  const templateCss = cssFromTemplate(template);
   let html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>Converted Document</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 40px; line-height: 1.6; color: #111827; }
-    h1, h2, h3, h4, h5, h6 { margin: 1.2em 0 0.6em; }
-    p { margin: 0.8em 0; }
-    ul { margin: 0.8em 0 0.8em 1.5em; }
-    li { margin: 0.3em 0; }
+    ${templateCss}
     .page { position: relative; }
     .abs { position: absolute; white-space: pre-wrap; }
-    table { width: 100%; border-collapse: collapse; margin: 0.8em 0; }
-    th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
     img { max-width: 100%; }
   </style>
 </head>
@@ -30,7 +33,10 @@ export async function generateHTML(
 
   if (mode === "exact") {
     const { width, height } = structure.metadata.dimensions;
-    html += `<div class="page" style="width:${width}px;height:${height}px;border:1px solid #e5e7eb;box-shadow:0 1px 2px rgba(0,0,0,0.05);">`;
+    const bgStyle = opts?.backgroundImage
+      ? `background-image:url('data:image/${guessImgExt(opts.backgroundImage)};base64,${opts.backgroundImage.toString("base64")}');background-size:100% 100%;background-repeat:no-repeat;`
+      : "";
+    html += `<div class="page" style="width:${width}px;height:${height}px;border:1px solid #e5e7eb;box-shadow:0 1px 2px rgba(0,0,0,0.05);${bgStyle}">`;
     for (const element of structure.elements) {
       html += await renderExactElement(element, assetLoader);
     }
@@ -165,6 +171,11 @@ async function tryGetDataUri(src: string, assetLoader?: AssetLoader): Promise<st
   } catch {
     return null;
   }
+}
+
+function guessImgExt(buf: Buffer): string {
+  // naive guess; default png
+  return "png";
 }
 
 function escapeHtml(s: string): string {

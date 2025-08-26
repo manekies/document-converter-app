@@ -19,6 +19,8 @@ export interface DocumentStructure {
     pageCount: number;
     orientation: "portrait" | "landscape";
     dimensions: { width: number; height: number };
+    template?: string; // optional template name applied during export/render
+    fontFamily?: string; // preferred font family (e.g., "Noto Sans")
   };
 }
 
@@ -87,6 +89,10 @@ export interface ConversionRequest {
   documentId: string;
   format: OutputFormat;
   mode: "exact" | "editable";
+  // Optional template name to influence export styles (e.g., "modern", "classic")
+  template?: string;
+  // Optional preferred font family, when available in fonts bucket (e.g., "Noto Sans")
+  fontFamily?: string;
 }
 
 export interface ConversionResponse {
@@ -108,6 +114,7 @@ export interface UpdateDocumentResponse {
 export interface PreviewRequest {
   id: string;
   mode?: "exact" | "editable";
+  template?: string;
 }
 
 export interface PreviewResponse {
@@ -122,6 +129,8 @@ export interface BatchProcessRequest {
   processingMode?: "auto" | "local" | "cloud";
   // Optional preferred OCR languages (Tesseract codes like "eng", "rus", "deu"), multi-language supported via "+"
   languages?: string[];
+  template?: string;
+  fontFamily?: string;
 }
 
 export interface BatchProcessItemResult {
@@ -166,4 +175,82 @@ export interface TranslateRequest {
 export interface TranslateResponse {
   translatedText: string;
   detectedSourceLanguage?: string;
+}
+
+// Templates
+export interface Template {
+  id: string;
+  name: string;
+  data: TemplateStyles;
+  createdAt: Date;
+}
+
+export interface TemplateStyles {
+  name: string;
+  page?: {
+    marginTop?: number;
+    marginRight?: number;
+    marginBottom?: number;
+    marginLeft?: number;
+    backgroundColor?: string;
+  };
+  fonts?: {
+    fontFamily?: string;
+    headingFontFamily?: string;
+    monoFontFamily?: string;
+  };
+  headings?: {
+    h1?: Partial<DocumentStyle>;
+    h2?: Partial<DocumentStyle>;
+    h3?: Partial<DocumentStyle>;
+    h4?: Partial<DocumentStyle>;
+    h5?: Partial<DocumentStyle>;
+    h6?: Partial<DocumentStyle>;
+  };
+  paragraph?: Partial<DocumentStyle>;
+  list?: Partial<DocumentStyle>;
+  table?: {
+    borderColor?: string;
+    headerBackground?: string;
+  };
+}
+
+// Batch streaming
+export interface BatchStreamHandshake {
+  documentIds: string[];
+  convertTo?: OutputFormat;
+  mode?: "exact" | "editable";
+  processingMode?: "auto" | "local" | "cloud";
+  languages?: string[];
+  template?: string;
+  fontFamily?: string;
+}
+
+export interface BatchProgressEvent {
+  documentId: string;
+  status: "queued" | "processing" | "converting" | "completed" | "failed";
+  progress?: number; // 0-100
+  message?: string;
+  outputId?: string;
+  downloadUrl?: string;
+  error?: string;
+}
+
+// Comparison
+export interface CompareRequest {
+  aId: string;
+  bId: string;
+  mode?: "text" | "structure";
+}
+
+export interface CompareResponse {
+  summary: {
+    aId: string;
+    bId: string;
+    mode: "text" | "structure";
+    cer: number;
+    wer: number;
+    equal: boolean;
+  };
+  diffHtml: string;
 }

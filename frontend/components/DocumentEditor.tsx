@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from "react";
-import { Save, Plus, Trash2, SpellCheck, Languages } from "lucide-react";
+import { Save, Plus, Trash2, SpellCheck, Languages, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import type { Document, DocumentElement } from "~backend/document/types";
+import type { Document, DocumentElement, DocumentStructure } from "~backend/document/types";
 import backend from "~backend/client";
+import { DocumentLivePreview } from "./DocumentLivePreview";
 
 interface DocumentEditorProps {
   document: Document;
@@ -23,6 +24,15 @@ export function DocumentEditor({ document, onSaved }: DocumentEditorProps) {
   const [saving, setSaving] = useState(false);
   const [spellLang, setSpellLang] = useState(document.detectedLanguage ?? "auto");
   const [targetLang, setTargetLang] = useState("en");
+
+  const structure: DocumentStructure = useMemo(() => ({
+    elements,
+    metadata: document.documentStructure?.metadata ?? {
+      pageCount: 1,
+      orientation: "portrait",
+      dimensions: { width: 595, height: 842 },
+    },
+  }), [elements, document.documentStructure?.metadata]);
 
   const handleAddElement = () => {
     setElements((els) => [
@@ -56,15 +66,7 @@ export function DocumentEditor({ document, onSaved }: DocumentEditorProps) {
       await backend.document.updateDocument({
         id: document.id,
         extractedText: text,
-        documentStructure: {
-          elements,
-          metadata:
-            document.documentStructure?.metadata ?? {
-              pageCount: 1,
-              orientation: "portrait",
-              dimensions: { width: 595, height: 842 },
-            },
-        },
+        documentStructure: structure,
       });
       toast({ title: "Saved", description: "Changes have been saved." });
       onSaved?.();
@@ -103,8 +105,8 @@ export function DocumentEditor({ document, onSaved }: DocumentEditorProps) {
   };
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
+    <div className="grid lg:grid-cols-3 gap-6">
+      <div className="bg-white border border-gray-200 rounded-lg p-4 lg:col-span-1">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900">Text</h3>
           <div className="flex items-center gap-2">
@@ -131,7 +133,6 @@ export function DocumentEditor({ document, onSaved }: DocumentEditorProps) {
               </Select>
             </div>
             <Button size="sm" onClick={save} disabled={saving}>
-              <Save className="h-4 w-4 mr-2" />
               Save
             </Button>
           </div>
@@ -166,7 +167,8 @@ export function DocumentEditor({ document, onSaved }: DocumentEditorProps) {
           </Button>
         </div>
       </div>
-      <div className="bg-white border border-gray-200 rounded-lg p-4">
+
+      <div className="bg-white border border-gray-200 rounded-lg p-4 lg:col-span-1">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-900">Structure</h3>
           <div className="flex gap-2">
@@ -257,6 +259,14 @@ export function DocumentEditor({ document, onSaved }: DocumentEditorProps) {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="lg:col-span-1">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-gray-900">Live Preview</h3>
+          <Eye className="h-4 w-4 text-gray-600" />
+        </div>
+        <DocumentLivePreview structure={structure} />
       </div>
     </div>
   );

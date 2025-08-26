@@ -1,5 +1,5 @@
 import PDFDocument from "pdfkit";
-import type { DocumentStructure, DocumentElement, DocumentStyle, TableCell } from "../types";
+import type { DocumentStructure, DocumentElement, DocumentStyle, TableCell, TemplateStyles } from "../types";
 
 type AssetLoader = (src: string) => Promise<Buffer | null>;
 
@@ -12,6 +12,7 @@ interface PdfOptions {
     italic?: Buffer;
     boldItalic?: Buffer;
   };
+  template?: TemplateStyles;
 }
 
 export async function generatePdf(
@@ -26,9 +27,23 @@ export async function generatePdf(
 
   const doc = new PDFDocument({
     size: pageSize,
-    margin: 50,
+    margin: opts?.template?.page
+      ? opts.template.page.marginLeft ?? 50
+      : 50,
     autoFirstPage: true,
   });
+
+  // Apply margins if provided in template
+  if (opts?.template?.page) {
+    const m = opts.template.page;
+    // @ts-ignore private API accepted pattern
+    doc.page.margins = {
+      top: m.marginTop ?? 50,
+      right: m.marginRight ?? 50,
+      bottom: m.marginBottom ?? 50,
+      left: m.marginLeft ?? 50,
+    };
+  }
 
   // Fonts
   if (opts?.fonts?.regular) doc.registerFont("Fallback", opts.fonts.regular);
@@ -54,11 +69,11 @@ export async function generatePdf(
 
     if (mode === "exact") {
       for (const el of structure.elements) {
-        await drawElementExact(doc, el, opts?.assetLoader);
+        await drawElementExact(doc, el, opts?.assetLoader, opts?.template);
       }
     } else {
       for (const el of structure.elements) {
-        await drawElementFlow(doc, el, opts?.assetLoader);
+        await drawElementFlow(doc, el, opts?.assetLoader, opts?.template);
       }
     }
 
@@ -66,23 +81,26 @@ export async function generatePdf(
   });
 }
 
-async function drawElementFlow(doc: PDFDocument, el: DocumentElement, assetLoader?: AssetLoader) {
-  const fontSize = el.style?.fontSize ?? (el.type === "heading" ? 18 : 12);
+async function drawElementFlow(doc: PDFDocument, el: DocumentElement, assetLoader?: AssetLoader, tpl?: TemplateStyles) {
+  const fontSize = el.style?.fontSize ?? (el.type === "heading" ? 18 : (tpl?.paragraph?.fontSize ?? 12));
   const align = el.style?.textAlign ?? "left";
+
   setFont(doc, el.style, el.type === "heading");
 
   if (el.type === "heading") {
     doc.moveDown(0.6);
+    doc.fontSize(fontSizeForHeading(tpl, el.level ?? 2));
     doc.text(el.content, { align, fillColor: colorOf(el.style) });
   } else if (el.type === "list") {
     const items = el.content.split("\n").filter(i => i.trim());
+    doc.fontSize(el.style?.fontSize ?? tpl?.list?.fontSize ?? 12);
     for (const i of items) {
       const clean = i.replace(/^[•\-\*\u2022]\s*/, "");
       doc.text("• " + clean, { align, fillColor: colorOf(el.style) });
     }
     doc.moveDown(0.5);
   } else if (el.type === "table" && el.table) {
-    drawTableFlow(doc, el.table.rows, el.style);
+    drawTableFlow(doc, el.table.rows, el.style, tpl);
   } else if (el.type === "image" && el.imageSrc && assetLoader) {
     const buf = await assetLoader(el.imageSrc);
     if (buf) {
@@ -99,7 +117,7 @@ async function drawElementFlow(doc: PDFDocument, el: DocumentElement, assetLoade
   }
 }
 
-async function drawElementExact(doc: PDFDocument, el: DocumentElement, assetLoader?: AssetLoader) {
+async function drawElementExact(doc: PDFDocument, el: DocumentElement, assetLoader?: AssetLoader, tpl?: TemplateStyles) {
   const x = el.position.x;
   const y = el.position.y;
   const width = el.position.width;
@@ -107,25 +125,25 @@ async function drawElementExact(doc: PDFDocument, el: DocumentElement, assetLoad
 
   if (el.type === "heading") {
     doc.save();
-    doc.fontSize(el.style?.fontSize ?? 18);
+    doc.fontSize(fontSizeForHeading(tpl, el.level ?? 2));
     applyDecoration(doc, el.style);
     doc.fillColor(colorOf(el.style));
     doc.text(el.content, x, y, { width, align: el.style?.textAlign ?? "left" });
     doc.restore();
   } else if (el.type === "list") {
     doc.save();
-    doc.fontSize(el.style?.fontSize ?? 12);
+    doc.fontSize(el.style?.fontSize ?? tpl?.list?.fontSize ?? 12);
     doc.fillColor(colorOf(el.style));
     const items = el.content.split("\n").filter(i => i.trim());
     let offsetY = y;
     for (const i of items) {
       const clean = i.replace(/^[•\-\*\u2022]\s*/, "");
       doc.text("• " + clean, x, offsetY, { width, align: el.style?.textAlign ?? "left" });
-      offsetY += (el.style?.fontSize ?? 12) + 4;
+      offsetY += (el.style?.fontSize ?? tpl?.list?.fontSize ?? 12) + 4;
     }
     doc.restore();
   } else if (el.type === "table" && el.table) {
-    drawTableExact(doc, x, y, width, el.table.rows, el.style);
+    drawTableExact(doc, x, y, width, el.table.rows, el.style, tpl);
   } else if (el.type === "image" && el.imageSrc && assetLoader) {
     const buf = await assetLoader(el.imageSrc);
     if (buf) {
@@ -135,7 +153,7 @@ async function drawElementExact(doc: PDFDocument, el: DocumentElement, assetLoad
     }
   } else {
     doc.save();
-    doc.fontSize(el.style?.fontSize ?? 12);
+    doc.fontSize(el.style?.fontSize ?? tpl?.paragraph?.fontSize ?? 12);
     applyDecoration(doc, el.style);
     doc.fillColor(colorOf(el.style));
     doc.text(el.content, x, y, { width, align: el.style?.textAlign ?? "left" });
@@ -180,11 +198,12 @@ function applyDecoration(doc: PDFDocument, style?: DocumentStyle) {
   }
 }
 
-function drawTableFlow(doc: PDFDocument, rows: TableCell[][], style?: DocumentStyle) {
+function drawTableFlow(doc: PDFDocument, rows: TableCell[][], style?: DocumentStyle, tpl?: TemplateStyles) {
   const cellPadding = 4;
   const colCount = Math.max(...rows.map(r => r.length));
   const tableWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right);
   const colWidth = tableWidth / colCount;
+  const borderColor = tpl?.table?.borderColor ?? "#e5e7eb";
 
   for (const row of rows) {
     let maxHeight = 0;
@@ -204,7 +223,7 @@ function drawTableFlow(doc: PDFDocument, rows: TableCell[][], style?: DocumentSt
       const text = cell.text;
       const x = doc.x + c * colWidth;
       const y = doc.y;
-      doc.rect(x, y, colWidth, maxHeight + cellPadding * 2).strokeColor("#e5e7eb").stroke();
+      doc.rect(x, y, colWidth, maxHeight + cellPadding * 2).strokeColor(borderColor).stroke();
       doc.save();
       doc.fontSize(cell.style?.fontSize ?? style?.fontSize ?? 11);
       setFont(doc, cell.style ?? style);
@@ -216,10 +235,11 @@ function drawTableFlow(doc: PDFDocument, rows: TableCell[][], style?: DocumentSt
   }
 }
 
-function drawTableExact(doc: PDFDocument, x0: number, y0: number, width: number, rows: TableCell[][], style?: DocumentStyle) {
+function drawTableExact(doc: PDFDocument, x0: number, y0: number, width: number, rows: TableCell[][], style?: DocumentStyle, tpl?: TemplateStyles) {
   const colCount = Math.max(...rows.map(r => r.length));
   const colWidth = width / colCount;
   const cellPadding = 3;
+  const borderColor = tpl?.table?.borderColor ?? "#e5e7eb";
   let y = y0;
   for (const row of rows) {
     let rowHeight = 0;
@@ -237,7 +257,7 @@ function drawTableExact(doc: PDFDocument, x0: number, y0: number, width: number,
     for (let c = 0; c < row.length; c++) {
       const cell = row[c];
       const x = x0 + c * colWidth;
-      doc.rect(x, y, colWidth, rowHeight).strokeColor("#e5e7eb").stroke();
+      doc.rect(x, y, colWidth, rowHeight).strokeColor(borderColor).stroke();
       doc.save();
       doc.fontSize(cell.style?.fontSize ?? style?.fontSize ?? 11);
       setFont(doc, cell.style ?? style);
@@ -247,4 +267,15 @@ function drawTableExact(doc: PDFDocument, x0: number, y0: number, width: number,
     }
     y += rowHeight;
   }
+}
+
+function fontSizeForHeading(tpl: TemplateStyles | undefined, level: number): number {
+  if (!tpl?.headings) return level === 1 ? 24 : level === 2 ? 18 : 14;
+  if (level === 1 && tpl.headings.h1?.fontSize) return tpl.headings.h1.fontSize;
+  if (level === 2 && tpl.headings.h2?.fontSize) return tpl.headings.h2.fontSize;
+  if (level === 3 && tpl.headings.h3?.fontSize) return tpl.headings.h3.fontSize;
+  if (level === 4 && tpl.headings.h4?.fontSize) return tpl.headings.h4.fontSize;
+  if (level === 5 && tpl.headings.h5?.fontSize) return tpl.headings.h5.fontSize;
+  if (level === 6 && tpl.headings.h6?.fontSize) return tpl.headings.h6.fontSize;
+  return 14;
 }

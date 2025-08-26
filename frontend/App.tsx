@@ -7,6 +7,7 @@ import { HomePage } from "./pages/HomePage";
 import { DocumentPage } from "./pages/DocumentPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { MetricsPage } from "./pages/MetricsPage";
+import { ComparePage } from "./pages/ComparePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/document/:id" element={<DocumentPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
+              <Route path="/compare" element={<ComparePage />} />
             </Routes>
           </main>
           <Toaster />
