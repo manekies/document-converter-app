@@ -6,9 +6,5 @@
   "workspaces": [
     "backend",
     "frontend"
-  ],
-  "dependencies": {
-    "phash-im": "^1.0.1",
-    "sharp": "^0.34.3"
-  }
+  ]
 }

@@ -240,9 +240,10 @@ export namespace document {
         public async process(params: RequestType<typeof api_document_process_process>): Promise<ResponseType<typeof api_document_process_process>> {
             // Construct the body with only the fields which we want encoded within the body (excluding query string or header fields)
             const body: Record<string, any> = {
-                languages: params.languages,
-                mode:      params.mode,
-                quality:   params.quality,
+                languages:     params.languages,
+                mode:          params.mode,
+                preprocessing: params.preprocessing,
+                quality:       params.quality,
             }
 
             // Now make the actual call to the API
