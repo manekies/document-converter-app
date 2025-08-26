@@ -8,10 +8,13 @@ import { tryGetDocTRBaseUrl, tryGetOCRSpaceKey, tryGetGoogleAIKey, tryGetGroqKey
 import type { DocumentStructure } from "../types";
 
 export type ProcessingMode = "auto" | "local" | "cloud";
+import type { TemplateROI } from "../types";
+
 export interface OrchestratorOptions {
   mode?: ProcessingMode; // auto by default
   quality?: "fast" | "best"; // best enables LLM semantic structure refinement
   languages?: string[]; // preferred OCR languages (Tesseract codes)
+  rois?: TemplateROI[]; // regions of interest for templated OCR
 }
 
 export interface OrchestratorResult {

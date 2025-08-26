@@ -155,6 +155,25 @@ export interface ListOutputsResponse {
   outputs: DocumentOutput[];
 }
 
+// Smart Document Templates for OCR
+export interface TemplateROI {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DocumentMatchingTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  rois: TemplateROI[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // NLP helpers
 export interface SpellcheckRequest {
   text: string;

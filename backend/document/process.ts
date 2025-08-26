@@ -2,6 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { documentDB } from "./db";
 import { originalImages, processedDocuments } from "./storage";
 import { processImageToStructure } from "./processors";
+import { findMatchingTemplate } from "./template_matcher";
 import type { ProcessingResult, DocumentStructure, DocumentElement } from "./types";
 import type { OrchestratorOptions } from "./orchestrator/router";
 
@@ -94,10 +95,14 @@ export const process = api<ProcessRequest, ProcessingResult>(
         }
       }
 
+      // Try to find a matching template
+      const matchedTemplate = await findMatchingTemplate(imageBuffer);
+
       const options: OrchestratorOptions = {
         mode: req.mode ?? "auto",
         quality: req.quality ?? "best",
         languages: req.languages,
+        rois: matchedTemplate?.rois, // Pass ROIs if a template was matched
       };
 
       // Process the image using orchestrator (local/cloud with fallbacks)
