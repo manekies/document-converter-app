@@ -1,6 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { documentDB } from "./db";
-import { processedDocuments } from "./storage";
+import { originalImages, processedDocuments } from "./storage";
 import type { ConversionRequest, ConversionResponse, DocumentStructure } from "./types";
 import { generateHTML } from "./exporters/html";
 import { generateMarkdown } from "./exporters/markdown";
@@ -45,6 +45,23 @@ export const convert = api<ConversionRequest, ConversionResponse>(
       ? JSON.parse(document.document_structure)
       : undefined;
 
+    // Asset loader for images referenced in structure.
+    const assetLoader = async (src: string) => {
+      try {
+        const inProcessed = await processedDocuments.exists(src).catch(() => false);
+        if (inProcessed) {
+          return await processedDocuments.download(src);
+        }
+        const inOriginal = await originalImages.exists(src).catch(() => false);
+        if (inOriginal) {
+          return await originalImages.download(src);
+        }
+      } catch {
+        // ignore
+      }
+      return null;
+    };
+
     // Generate content based on format and mode
     let buffer: Buffer;
     let contentType: string;
@@ -68,9 +85,10 @@ export const convert = api<ConversionRequest, ConversionResponse>(
         break;
       }
       case "html": {
-        const html = generateHTML(
+        const html = await generateHTML(
           documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
-          req.mode
+          req.mode,
+          assetLoader
         );
         buffer = Buffer.from(html, "utf8");
         contentType = "text/html; charset=utf-8";
@@ -79,16 +97,21 @@ export const convert = api<ConversionRequest, ConversionResponse>(
       case "docx": {
         const docx = await generateDocx(
           documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
-          req.mode
+          req.mode,
+          assetLoader
         );
         buffer = docx;
         contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         break;
       }
       case "pdf": {
+        const bgImage = req.mode === "exact"
+          ? await originalImages.download(`${req.documentId}/${document.original_filename}`).catch(() => undefined)
+          : undefined;
         const pdf = await generatePdf(
           documentStructure ?? fallbackStructureFromText(document.extracted_text ?? ""),
-          req.mode
+          req.mode,
+          { backgroundImage: bgImage, assetLoader }
         );
         buffer = pdf;
         contentType = "application/pdf";

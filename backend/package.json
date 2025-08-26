@@ -9,6 +9,7 @@
   "dependencies": {
     "docx": "^9.4.1",
     "encore.dev": "^1.48.13",
+    "franc": "^6.2.0",
     "pdfkit": "^0.17.0",
     "tesseract.js": "^6.0.1"
   },

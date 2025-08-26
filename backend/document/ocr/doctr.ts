@@ -6,7 +6,8 @@ import type { DocumentStructure } from "../types";
 // { text: string; structure: DocumentStructure; language: string; confidence: number }
 export async function ocrWithDocTR(
   imageBuffer: Buffer,
-  mimeType: string
+  mimeType: string,
+  languages?: string[]
 ): Promise<{ text: string; structure: DocumentStructure; language: string; confidence: number }> {
   const base = tryGetDocTRBaseUrl();
   if (!base) throw new Error("docTR endpoint not configured");
@@ -15,6 +16,9 @@ export async function ocrWithDocTR(
   const form = new FormData();
   const blob = new Blob([imageBuffer], { type: mimeType || "application/octet-stream" });
   form.append("file", blob, "image");
+  if (languages && languages.length > 0) {
+    form.append("languages", languages.join(","));
+  }
 
   const resp = await fetch(`${base.replace(/\/$/, "")}/ocr`, {
     method: "POST",

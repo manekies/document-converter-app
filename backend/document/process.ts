@@ -2,7 +2,7 @@ import { api, APIError } from "encore.dev/api";
 import { documentDB } from "./db";
 import { originalImages } from "./storage";
 import { processImageToStructure } from "./processors";
-import type { ProcessingResult, DocumentStructure } from "./types";
+import type { ProcessingResult } from "./types";
 import type { OrchestratorOptions } from "./orchestrator/router";
 
 interface ProcessRequest {
@@ -10,6 +10,8 @@ interface ProcessRequest {
   // Processing orchestration options
   mode?: "auto" | "local" | "cloud";
   quality?: "fast" | "best";
+  // Optional preferred OCR languages (Tesseract codes like "eng", "rus", "deu"), multi-language supported via "+"
+  languages?: string[];
 }
 
 // Processes an uploaded document image to extract text and structure.
@@ -52,6 +54,7 @@ export const process = api<ProcessRequest, ProcessingResult>(
       const options: OrchestratorOptions = {
         mode: req.mode ?? "auto",
         quality: req.quality ?? "best",
+        languages: req.languages,
       };
 
       // Process the image using orchestrator (local/cloud with fallbacks)

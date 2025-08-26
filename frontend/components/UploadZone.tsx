@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Upload, FileImage, AlertCircle, CheckCircle, Cog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { LoadingSpinner } from "./LoadingSpinner";
 import backend from "~backend/client";
@@ -19,6 +20,7 @@ export function UploadZone() {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [processingMode, setProcessingMode] = useState<"auto" | "local" | "cloud">("auto");
   const [quality, setQuality] = useState<"fast" | "best">("best");
+  const [languages, setLanguages] = useState<string>(""); // comma-separated Tesseract codes
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -55,7 +57,7 @@ export function UploadZone() {
     setTimeout(() => {
       navigate("/documents");
     }, 800);
-  }, [toast, navigate, processingMode, quality]);
+  }, [toast, navigate, processingMode, quality, languages]);
 
   const handleUpload = async (item: UploadItem) => {
     setItems((prev) => prev.map((it) => (it === item ? { ...it, status: "uploading" } : it)));
@@ -84,7 +86,13 @@ export function UploadZone() {
         prev.map((it) => (it === item ? { ...it, status: "processing", documentId: uploadResponse.documentId } : it))
       );
 
-      await backend.document.process({ documentId: uploadResponse.documentId, mode: processingMode, quality });
+      const langs = languages.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+      await backend.document.process({
+        documentId: uploadResponse.documentId,
+        mode: processingMode,
+        quality,
+        languages: langs.length > 0 ? langs : undefined,
+      });
 
       setItems((prev) =>
         prev.map((it) => (it === item ? { ...it, status: "done" } : it))
@@ -119,7 +127,7 @@ export function UploadZone() {
           <Cog className="h-5 w-5 text-gray-600" />
           <h3 className="font-semibold text-gray-900">Processing Preferences</h3>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="text-sm text-gray-600">Mode</label>
             <Select value={processingMode} onValueChange={(v) => setProcessingMode(v as any)}>
@@ -144,6 +152,14 @@ export function UploadZone() {
                 <SelectItem value="fast">Fast</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Languages (optional)</label>
+            <Input
+              value={languages}
+              onChange={(e) => setLanguages(e.target.value)}
+              placeholder="e.g., eng,rus,jpn (Tesseract codes)"
+            />
           </div>
         </div>
       </div>

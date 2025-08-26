@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Document Processing API",
-    "version": "1.0.0",
-    "description": "REST API for document upload, processing, conversion, and metrics"
+    "version": "1.1.0",
+    "description": "REST API for document upload, processing, conversion, metrics, and NLP utilities"
   },
   "paths": {
     "/document/upload": {
@@ -59,7 +59,12 @@
                 "properties": {
                   "documentId": { "type": "string" },
                   "mode": { "type": "string", "enum": ["auto", "local", "cloud"] },
-                  "quality": { "type": "string", "enum": ["fast", "best"] }
+                  "quality": { "type": "string", "enum": ["fast", "best"] },
+                  "languages": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Preferred OCR languages (Tesseract codes like eng,rus)."
+                  }
                 },
                 "required": ["documentId"]
               }
@@ -136,6 +141,42 @@
         "summary": "Metrics dashboard",
         "responses": { "200": { "description": "Dashboard" } }
       }
-    }
-  }
-}
+    },
+    "/nlp/spellcheck": {
+      "post": {
+        "summary": "Spellcheck and grammar correction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "language": { "type": "string" }
+                },
+                "required": ["text"]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Corrected text" } }
+      }
+    },
+    "/nlp/translate": {
+      "post": {
+        "summary": "Translate text",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "sourceLanguage": { "type": "string" },
+                  "targetLanguage": { "type": "string" }
+                },
+                "required": ["text", "targetLanguage"]
+              }
+           

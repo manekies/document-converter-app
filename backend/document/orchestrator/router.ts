@@ -11,6 +11,7 @@ export type ProcessingMode = "auto" | "local" | "cloud";
 export interface OrchestratorOptions {
   mode?: ProcessingMode; // auto by default
   quality?: "fast" | "best"; // best enables LLM semantic structure refinement
+  languages?: string[]; // preferred OCR languages (Tesseract codes)
 }
 
 export interface OrchestratorResult {
@@ -53,7 +54,7 @@ export async function processWithOrchestrator(
     // Always include tesseract
     ocrCandidates.push(
       (async () => {
-        const r = await ocrAndStructureFromImage(imageBuffer, { lang: "eng" });
+        const r = await ocrAndStructureFromImage(imageBuffer, { langs: opts?.languages ?? ["eng"] });
         return {
           text: r.text,
           structure: r.structure,
@@ -66,7 +67,7 @@ export async function processWithOrchestrator(
     if (doctrAvailable) {
       ocrCandidates.push(
         (async () => {
-          const r = await ocrWithDocTR(imageBuffer, mimeType);
+          const r = await ocrWithDocTR(imageBuffer, mimeType, opts?.languages);
           return {
             text: r.text,
             structure: r.structure,
@@ -80,7 +81,7 @@ export async function processWithOrchestrator(
   } else if (allowCloud && ocrspaceAvailable) {
     ocrCandidates.push(
       (async () => {
-        const r = await ocrWithOCRSpace(imageBuffer, mimeType);
+        const r = await ocrWithOCRSpace(imageBuffer, mimeType, opts?.languages);
         return {
           text: r.text,
           structure: r.structure,
@@ -93,7 +94,7 @@ export async function processWithOrchestrator(
     // Still include local as additional candidate to enable ensemble if fast.
     ocrCandidates.push(
       (async () => {
-        const r = await ocrAndStructureFromImage(imageBuffer, { lang: "eng" });
+        const r = await ocrAndStructureFromImage(imageBuffer, { langs: opts?.languages ?? ["eng"] });
         return {
           text: r.text,
           structure: r.structure,
@@ -107,7 +108,7 @@ export async function processWithOrchestrator(
     // Fallback to tesseract
     ocrCandidates.push(
       (async () => {
-        const r = await ocrAndStructureFromImage(imageBuffer, { lang: "eng" });
+        const r = await ocrAndStructureFromImage(imageBuffer, { langs: opts?.languages ?? ["eng"] });
         return {
           text: r.text,
           structure: r.structure,
@@ -127,7 +128,7 @@ export async function processWithOrchestrator(
   if (successes.length === 0) {
     // If all failed and cloud is allowed, try cloud once more
     if (allowCloud && ocrspaceAvailable) {
-      const r = await ocrWithOCRSpace(imageBuffer, mimeType);
+      const r = await ocrWithOCRSpace(imageBuffer, mimeType, opts?.languages);
       return {
         text: r.text,
         structure: r.structure,
@@ -137,7 +138,7 @@ export async function processWithOrchestrator(
       };
     }
     // last resort tesseract
-    const r = await ocrAndStructureFromImage(imageBuffer, { lang: "eng" });
+    const r = await ocrAndStructureFromImage(imageBuffer, { langs: opts?.languages ?? ["eng"] });
     return {
       text: r.text,
       structure: r.structure,

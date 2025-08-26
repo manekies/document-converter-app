@@ -19,6 +19,19 @@ export function generateMarkdown(structure: DocumentStructure, mode: "exact" | "
         md += "\n";
         break;
       }
+      case "table": {
+        const rows = element.table?.rows ?? [];
+        if (rows.length > 0) {
+          // header
+          md += `| ${rows[0].map(c => c.text.trim()).join(" | ")} |\n`;
+          md += `| ${rows[0].map(() => "---").join(" | ")} |\n`;
+          for (const row of rows.slice(1)) {
+            md += `| ${row.map(c => c.text.trim()).join(" | ")} |\n`;
+          }
+          md += "\n";
+        }
+        break;
+      }
       default:
         md += `${element.content}\n\n`;
         break;

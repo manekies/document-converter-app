@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { ConversionPanel } from "./ConversionPanel";
@@ -20,12 +21,14 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
   const [doc, setDoc] = useState(document);
   const [processingMode, setProcessingMode] = useState<"auto" | "local" | "cloud">("auto");
   const [quality, setQuality] = useState<"fast" | "best">("best");
+  const [languages, setLanguages] = useState<string>("");
   const { toast } = useToast();
 
   const handleReprocess = async () => {
     setIsProcessing(true);
     try {
-      await backend.document.process({ documentId: doc.id, mode: processingMode, quality });
+      const langs = languages.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+      await backend.document.process({ documentId: doc.id, mode: processingMode, quality, languages: langs.length > 0 ? langs : undefined });
       toast({
         title: "Reprocessing started",
         description: "Your document is being reprocessed.",
@@ -51,6 +54,7 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
       p{margin:.5em 0}
       ul{margin:.5em 0 .5em 1.25em}
       li{margin:.25em 0}
+      table{border-collapse:collapse;width:100%}th,td{border:1px solid #e5e7eb;padding:6px 8px}
     </style></head><body>`;
     for (const el of doc.documentStructure.elements) {
       if (el.type === "heading") {
@@ -63,6 +67,16 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
           html += `<li>${escapeHtml(it.replace(/^[•\\-\\*\\u2022]\\s*/, ""))}</li>`;
         }
         html += "</ul>";
+      } else if (el.type === "table" && el.table) {
+        html += "<table><tbody>";
+        for (const row of el.table.rows) {
+          html += "<tr>";
+          for (const cell of row) {
+            html += `<td>${escapeHtml(cell.text)}</td>`;
+          }
+          html += "</tr>";
+        }
+        html += "</tbody></table>";
       } else {
         html += `<p>${escapeHtml(el.content)}</p>`;
       }
@@ -116,6 +130,12 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
                   <SelectItem value="fast">Fast</SelectItem>
                 </SelectContent>
               </Select>
+              <Input
+                value={languages}
+                onChange={(e) => setLanguages(e.target.value)}
+                placeholder="langs: eng,rus (optional)"
+                className="w-56"
+              />
             </div>
             {doc.processingStatus === "failed" && (
               <Button
@@ -252,6 +272,12 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
                   <SelectItem value="fast">Fast</SelectItem>
                 </SelectContent>
               </Select>
+              <Input
+                value={languages}
+                onChange={(e) => setLanguages(e.target.value)}
+                placeholder="langs: eng,rus (optional)"
+                className="w-56"
+              />
             </div>
             <Button onClick={handleReprocess} disabled={isProcessing}>
               {isProcessing ? (

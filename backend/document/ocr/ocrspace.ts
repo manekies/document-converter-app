@@ -5,12 +5,15 @@ import type { DocumentStructure } from "../types";
 // Note: Use only for non-sensitive data.
 export async function ocrWithOCRSpace(
   imageBuffer: Buffer,
-  mimeType: string
+  mimeType: string,
+  languages?: string[]
 ): Promise<{ text: string; structure: DocumentStructure; language: string; confidence: number }> {
   const apiKey = tryGetOCRSpaceKey();
   if (!apiKey) {
     throw new Error("OCR.Space API key not configured");
   }
+
+  const langCode = (languages?.[0] ?? "eng").toLowerCase();
 
   const form = new FormData();
   const blob = new Blob([imageBuffer], { type: mimeType || "application/octet-stream" });
@@ -19,7 +22,7 @@ export async function ocrWithOCRSpace(
   form.append("scale", "true");
   form.append("isTable", "true");
   form.append("detectOrientation", "true");
-  form.append("language", "eng");
+  form.append("language", langCode);
 
   const resp = await fetch("https://api.ocr.space/parse/image", {
     method: "POST",
@@ -66,5 +69,23 @@ export async function ocrWithOCRSpace(
     metadata: { pageCount: 1, orientation: "portrait", dimensions: { width: 595, height: 842 } },
   };
 
-  return { text, structure, language: "en", confidence: typeof meanConf === "number" ? meanConf : 0 };
+  return { text, structure, language: mapOCRSpaceLang(langCode), confidence: typeof meanConf === "number" ? meanConf : 0 };
+}
+
+function mapOCRSpaceLang(code: string): string {
+  const map: Record<string, string> = {
+    eng: "en",
+    rus: "ru",
+    deu: "de",
+    ger: "de",
+    fra: "fr",
+    fre: "fr",
+    spa: "es",
+    ita: "it",
+    por: "pt",
+    jpn: "ja",
+    chi_sim: "zh",
+    ara: "ar",
+  };
+  return map[code] ?? "en";
 }

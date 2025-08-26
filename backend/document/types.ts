@@ -22,19 +22,40 @@ export interface DocumentStructure {
   };
 }
 
+export interface DocumentStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  textAlign?: "left" | "center" | "right" | "justify";
+  color?: string;
+  backgroundColor?: string;
+  textDecoration?: "underline" | "line-through";
+  lineHeight?: number;
+}
+
+export interface TableCell {
+  text: string;
+  colSpan?: number;
+  rowSpan?: number;
+  style?: DocumentStyle;
+}
+
+export interface TableData {
+  rows: TableCell[][];
+  columnWidths?: number[];
+}
+
 export interface DocumentElement {
   type: "heading" | "paragraph" | "table" | "list" | "image" | "formula";
   content: string;
   position: { x: number; y: number; width: number; height: number };
-  style: {
-    fontSize?: number;
-    fontWeight?: "normal" | "bold";
-    fontStyle?: "normal" | "italic";
-    textAlign?: "left" | "center" | "right" | "justify";
-    color?: string;
-    backgroundColor?: string;
-  };
+  style: DocumentStyle;
   level?: number; // for headings and list items
+  imageSrc?: string; // path in object storage or URL
+  imageWidth?: number;
+  imageHeight?: number;
+  table?: TableData;
 }
 
 export interface DocumentOutput {
@@ -99,6 +120,8 @@ export interface BatchProcessRequest {
   mode?: "exact" | "editable";
   // Orchestration mode for processing stage
   processingMode?: "auto" | "local" | "cloud";
+  // Optional preferred OCR languages (Tesseract codes like "eng", "rus", "deu"), multi-language supported via "+"
+  languages?: string[];
 }
 
 export interface BatchProcessItemResult {
@@ -121,4 +144,26 @@ export interface ListOutputsRequest {
 
 export interface ListOutputsResponse {
   outputs: DocumentOutput[];
+}
+
+// NLP helpers
+export interface SpellcheckRequest {
+  text: string;
+  language?: string; // BCP-47 or ISO language code; if omitted, autodetect
+}
+
+export interface SpellcheckResponse {
+  correctedText: string;
+  suggestions?: string[];
+}
+
+export interface TranslateRequest {
+  text: string;
+  sourceLanguage?: string; // autodetect if not provided
+  targetLanguage: string;
+}
+
+export interface TranslateResponse {
+  translatedText: string;
+  detectedSourceLanguage?: string;
 }

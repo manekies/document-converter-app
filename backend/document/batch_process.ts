@@ -35,6 +35,7 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
             await processImageToStructure(imageBuffer, doc.mime_type, {
               mode: req.processingMode ?? "auto",
               quality: "best",
+              languages: req.languages,
             });
 
           await documentDB.exec`
@@ -58,6 +59,23 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
             return { documentId: id, status: "completed" as const };
           }
 
+          // Asset loader for images referenced in structure.
+          const assetLoader = async (src: string) => {
+            try {
+              const inProcessed = await processedDocuments.exists(src).catch(() => false);
+              if (inProcessed) {
+                return await processedDocuments.download(src);
+              }
+              const inOriginal = await originalImages.exists(src).catch(() => false);
+              if (inOriginal) {
+                return await originalImages.download(src);
+              }
+            } catch {
+              // ignore
+            }
+            return null;
+          };
+
           // Generate conversion
           let buffer: Buffer;
           let contentType: string;
@@ -65,22 +83,28 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
 
           switch (req.convertTo) {
             case "docx":
-              buffer = await generateDocx(structure, req.mode ?? "editable");
+              buffer = await generateDocx(structure, req.mode ?? "editable", assetLoader);
               contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
               break;
-            case "pdf":
-              buffer = await generatePdf(structure, req.mode ?? "editable");
+            case "pdf": {
+              const bgImage = req.mode === "exact" ? imageBuffer : undefined;
+              buffer = await generatePdf(structure, req.mode ?? "editable", { backgroundImage: bgImage, assetLoader });
               contentType = "application/pdf";
               break;
-            case "html":
-              buffer = Buffer.from(generateHTML(structure, req.mode ?? "editable"), "utf8");
+            }
+            case "html": {
+              const html = await generateHTML(structure, req.mode ?? "editable", assetLoader);
+              buffer = Buffer.from(html, "utf8");
               contentType = "text/html; charset=utf-8";
               break;
-            case "markdown":
-              buffer = Buffer.from(generateMarkdown(structure, req.mode ?? "editable"), "utf8");
+            }
+            case "markdown": {
+              const md = generateMarkdown(structure, req.mode ?? "editable");
+              buffer = Buffer.from(md, "utf8");
               contentType = "text/markdown; charset=utf-8";
               ext = "md";
               break;
+            }
             case "txt":
               buffer = Buffer.from(text, "utf8");
               contentType = "text/plain; charset=utf-8";

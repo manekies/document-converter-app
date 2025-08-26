@@ -1,13 +1,14 @@
 import Tesseract from "tesseract.js";
 import type { DocumentElement, DocumentStructure } from "../types";
+import { detectPrimaryLanguageISO1 } from "../utils/lang";
 
 // Performs offline OCR using Tesseract.js and builds a reasonable structure.
 export async function ocrAndStructureFromImage(
   imageBuffer: Buffer,
-  opts?: { lang?: string }
+  opts?: { lang?: string; langs?: string[] }
 ): Promise<{ text: string; structure: DocumentStructure; language: string; confidence: number }> {
-  const lang = opts?.lang ?? "eng";
-  const res = await Tesseract.recognize(imageBuffer, lang);
+  const langArg = opts?.langs && opts.langs.length > 0 ? opts.langs.join("+") : (opts?.lang ?? "eng");
+  const res = await Tesseract.recognize(imageBuffer, langArg);
   const { text, lines, words } = res.data;
 
   // Extract image size if available (fallback to default A4-ish in px @72dpi)
@@ -20,15 +21,15 @@ export async function ocrAndStructureFromImage(
   let avgConf = 0;
   let confCount = 0;
   for (const w of words ?? []) {
-    if (typeof w.confidence === "number") {
-      avgConf += w.confidence;
+    if (typeof (w as any).confidence === "number") {
+      avgConf += (w as any).confidence;
       confCount++;
     }
   }
   const confidence = confCount > 0 ? avgConf / confCount : 0;
 
   // Simple heuristic: treat each line as a paragraph, detect headings and lists.
-  for (const line of lines ?? []) {
+  for (const line of (lines as any[]) ?? []) {
     const content = (line?.text ?? "").trim();
     if (!content) continue;
 
@@ -101,6 +102,7 @@ export async function ocrAndStructureFromImage(
     },
   };
 
-  // Language detection is not included by Tesseract; default to 'en'.
-  return { text: text?.trim() ?? "", structure, language: "en", confidence };
+  // Language detection using statistically inferred guess
+  const detected = detectPrimaryLanguageISO1((text ?? "").trim()) ?? "en";
+  return { text: (text ?? "").trim(), structure, language: detected, confidence };
 }
