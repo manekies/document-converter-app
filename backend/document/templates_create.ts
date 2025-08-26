@@ -11,7 +11,7 @@ interface CreateTemplateRequest {
 
 // Creates a new document matching template.
 export const createTemplate = api<CreateTemplateRequest, DocumentMatchingTemplate>(
-  { expose: true, method: "POST", path: "/templates" },
+  { expose: true, method: "POST", path: "/document-templates" },
   async (req) => {
     if (!req.name) {
       throw APIError.invalidArgument("template name is required");

@@ -96,6 +96,11 @@ import {
     listTemplates as api_document_templates_listTemplates,
     upsertTemplate as api_document_templates_upsertTemplate
 } from "~backend/document/templates";
+import { createTemplate as api_document_templates_create_createTemplate } from "~backend/document/templates_create";
+import { deleteTemplate as api_document_templates_delete_deleteTemplate } from "~backend/document/templates_delete";
+import { getTemplate as api_document_templates_get_getTemplate } from "~backend/document/templates_get";
+import { listTemplates as api_document_templates_list_listTemplates } from "~backend/document/templates_list";
+import { updateTemplate as api_document_templates_update_updateTemplate } from "~backend/document/templates_update";
 import { updateDocument as api_document_update_updateDocument } from "~backend/document/update";
 import { upload as api_document_upload_upload } from "~backend/document/upload";
 import { listVersions as api_document_versions_list_listVersions } from "~backend/document/versions_list";
@@ -114,10 +119,14 @@ export namespace document {
             this.batchProcessStream = this.batchProcessStream.bind(this)
             this.compare = this.compare.bind(this)
             this.convert = this.convert.bind(this)
+            this.createDocumentTemplate = this.createDocumentTemplate.bind(this)
+            this.deleteDocumentTemplate = this.deleteDocumentTemplate.bind(this)
             this.get = this.get.bind(this)
             this.getDashboard = this.getDashboard.bind(this)
+            this.getDocumentTemplate = this.getDocumentTemplate.bind(this)
             this.getVersion = this.getVersion.bind(this)
             this.list = this.list.bind(this)
+            this.listDocumentTemplates = this.listDocumentTemplates.bind(this)
             this.listOutputs = this.listOutputs.bind(this)
             this.listTemplates = this.listTemplates.bind(this)
             this.listVersions = this.listVersions.bind(this)
@@ -126,6 +135,7 @@ export namespace document {
             this.spellcheck = this.spellcheck.bind(this)
             this.translate = this.translate.bind(this)
             this.updateDocument = this.updateDocument.bind(this)
+            this.updateDocumentTemplate = this.updateDocumentTemplate.bind(this)
             this.upload = this.upload.bind(this)
             this.upsertTemplate = this.upsertTemplate.bind(this)
         }
@@ -173,6 +183,22 @@ export namespace document {
         }
 
         /**
+         * Creates a new document matching template.
+         */
+        public async createDocumentTemplate(params: RequestType<typeof api_document_templates_create_createTemplate>): Promise<ResponseType<typeof api_document_templates_create_createTemplate>> {
+            const resp = await this.baseClient.callTypedAPI(`/document-templates`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_templates_create_createTemplate>
+        }
+
+        /**
+         * Deletes a document matching template by ID.
+         */
+        public async deleteDocumentTemplate(params: { templateId: string }): Promise<ResponseType<typeof api_document_templates_delete_deleteTemplate>> {
+            const resp = await this.baseClient.callTypedAPI(`/document-templates/${encodeURIComponent(params.templateId)}`, {method: "DELETE", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_templates_delete_deleteTemplate>
+        }
+
+        /**
          * Retrieves document information by ID.
          */
         public async get(params: { id: string }): Promise<ResponseType<typeof api_document_get_get>> {
@@ -188,6 +214,14 @@ export namespace document {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/metrics/dashboard`, {method: "GET", body: undefined})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_metrics_getDashboard>
+        }
+
+        /**
+         * Gets a single document matching template by ID.
+         */
+        public async getDocumentTemplate(params: { templateId: string }): Promise<ResponseType<typeof api_document_templates_get_getTemplate>> {
+            const resp = await this.baseClient.callTypedAPI(`/document-templates/${encodeURIComponent(params.templateId)}`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_templates_get_getTemplate>
         }
 
         /**
@@ -212,6 +246,14 @@ export namespace document {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/documents`, {query, method: "GET", body: undefined})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_list_list>
+        }
+
+        /**
+         * Lists all document matching templates.
+         */
+        public async listDocumentTemplates(): Promise<ResponseType<typeof api_document_templates_list_listTemplates>> {
+            const resp = await this.baseClient.callTypedAPI(`/document-templates`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_templates_list_listTemplates>
         }
 
         /**
@@ -303,6 +345,20 @@ export namespace document {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/document/${encodeURIComponent(params.id)}`, {method: "PUT", body: JSON.stringify(body)})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_update_updateDocument>
+        }
+
+        /**
+         * Updates a document matching template.
+         */
+        public async updateDocumentTemplate(params: RequestType<typeof api_document_templates_update_updateTemplate>): Promise<ResponseType<typeof api_document_templates_update_updateTemplate>> {
+            const body: Record<string, any> = {
+                name: params.name,
+                description: params.description,
+                matchFingerprint: params.matchFingerprint,
+                rois: params.rois,
+            }
+            const resp = await this.baseClient.callTypedAPI(`/document-templates/${encodeURIComponent(params.templateId)}`, {method: "PUT", body: JSON.stringify(body)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_document_templates_update_updateTemplate>
         }
 
         /**
