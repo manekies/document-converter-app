@@ -1,8 +1,8 @@
 {
   "name": "leap-app",
   "version": "1.0.0",
-  "type": "module",
   "packageManager": "bun",
+  "type": "module",
   "workspaces": [
     "backend",
     "frontend"
