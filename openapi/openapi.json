@@ -1,0 +1,141 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Document Processing API",
+    "version": "1.0.0",
+    "description": "REST API for document upload, processing, conversion, and metrics"
+  },
+  "paths": {
+    "/document/upload": {
+      "post": {
+        "summary": "Initiate upload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "filename": { "type": "string" },
+                  "mimeType": { "type": "string" },
+                  "fileSize": { "type": "integer" }
+                },
+                "required": ["filename", "mimeType", "fileSize"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documentId": { "type": "string" },
+                    "uploadUrl": { "type": "string", "format": "uri" }
+                  },
+                  "required": ["documentId", "uploadUrl"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/document/{documentId}/process": {
+      "post": {
+        "summary": "Process document",
+        "parameters": [
+          { "name": "documentId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentId": { "type": "string" },
+                  "mode": { "type": "string", "enum": ["auto", "local", "cloud"] },
+                  "quality": { "type": "string", "enum": ["fast", "best"] }
+                },
+                "required": ["documentId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Processing result" }
+        }
+      }
+    },
+    "/document/{id}": {
+      "get": {
+        "summary": "Get document",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Document" } }
+      },
+      "put": {
+        "summary": "Update document",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/documents": {
+      "get": {
+        "summary": "List documents",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "List" } }
+      }
+    },
+    "/documents/batch/process": {
+      "post": {
+        "summary": "Batch process and convert",
+        "requestBody": { "required": true },
+        "responses": { "200": { "description": "Batch results" } }
+      }
+    },
+    "/document/convert": {
+      "post": {
+        "summary": "Convert document to a format",
+        "requestBody": { "required": true },
+        "responses": { "200": { "description": "Conversion result" } }
+      }
+    },
+    "/document/{id}/preview": {
+      "get": {
+        "summary": "Get HTML preview",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "mode", "in": "query", "schema": { "type": "string", "enum": ["exact", "editable"] } }
+        ],
+        "responses": { "200": { "description": "HTML" } }
+      }
+    },
+    "/document/{documentId}/outputs": {
+      "get": {
+        "summary": "List outputs",
+        "parameters": [
+          { "name": "documentId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Outputs" } }
+      }
+    },
+    "/metrics/dashboard": {
+      "get": {
+        "summary": "Metrics dashboard",
+        "responses": { "200": { "description": "Dashboard" } }
+      }
+    }
+  }
+}

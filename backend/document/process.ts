@@ -3,9 +3,13 @@ import { documentDB } from "./db";
 import { originalImages } from "./storage";
 import { processImageToStructure } from "./processors";
 import type { ProcessingResult, DocumentStructure } from "./types";
+import type { OrchestratorOptions } from "./orchestrator/router";
 
 interface ProcessRequest {
   documentId: string;
+  // Processing orchestration options
+  mode?: "auto" | "local" | "cloud";
+  quality?: "fast" | "best";
 }
 
 // Processes an uploaded document image to extract text and structure.
@@ -23,6 +27,7 @@ export const process = api<ProcessRequest, ProcessingResult>(
       WHERE id = ${req.documentId}
     `;
 
+    const started = Date.now();
     try {
       // Get document info
       const document = await documentDB.queryRow<{
@@ -44,10 +49,16 @@ export const process = api<ProcessRequest, ProcessingResult>(
         `${document.id}/${document.original_filename}`
       );
 
-      // Process the image using offline OCR (with optional cloud augmentation)
-      const { text, structure, language } = await processImageToStructure(
+      const options: OrchestratorOptions = {
+        mode: req.mode ?? "auto",
+        quality: req.quality ?? "best",
+      };
+
+      // Process the image using orchestrator (local/cloud with fallbacks)
+      const { text, structure, language, confidence, ocrProvider, llmProvider } = await processImageToStructure(
         imageBuffer,
-        document.mime_type
+        document.mime_type,
+        options
       );
 
       // Update document with results
@@ -62,6 +73,12 @@ export const process = api<ProcessRequest, ProcessingResult>(
         WHERE id = ${req.documentId}
       `;
 
+      const duration = Date.now() - started;
+      await documentDB.exec`
+        INSERT INTO processing_runs (document_id, mode, ocr_provider, llm_provider, confidence, text_length, duration_ms, status)
+        VALUES (${req.documentId}, ${options.mode!}, ${ocrProvider}, ${llmProvider ?? null}, ${confidence}, ${text.length}, ${duration}, 'completed')
+      `;
+
       return {
         documentId: req.documentId,
         status: "completed",
@@ -70,6 +87,11 @@ export const process = api<ProcessRequest, ProcessingResult>(
         documentStructure: structure,
       };
     } catch (error) {
+      const duration = Date.now() - started;
+      await documentDB.exec`
+        INSERT INTO processing_runs (document_id, mode, ocr_provider, llm_provider, confidence, text_length, duration_ms, status)
+        VALUES (${req.documentId}, ${req.mode ?? "auto"}, ${"unknown"}, ${null}, ${null}, ${0}, ${duration}, 'failed')
+      `;
       // Update status to failed
       await documentDB.exec`
         UPDATE documents 

@@ -1,7 +1,7 @@
 import { api } from "encore.dev/api";
 import { documentDB } from "./db";
 import { originalImages, processedDocuments } from "./storage";
-import type { BatchProcessRequest, BatchProcessResponse, DocumentStructure } from "./types";
+import type { BatchProcessRequest, BatchProcessResponse } from "./types";
 import { processImageToStructure } from "./processors";
 import { generateDocx } from "./exporters/docx";
 import { generatePdf } from "./exporters/pdf";
@@ -14,6 +14,7 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
   async (req) => {
     const results = await Promise.all(
       req.documentIds.map(async (id) => {
+        const started = Date.now();
         try {
           const doc = await documentDB.queryRow<{
             id: string;
@@ -29,8 +30,12 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
           // Download the image
           const imageBuffer = await originalImages.download(`${doc.id}/${doc.original_filename}`);
 
-          // Process
-          const { text, structure, language } = await processImageToStructure(imageBuffer, doc.mime_type);
+          // Process via orchestrator
+          const { text, structure, language, confidence, ocrProvider, llmProvider } =
+            await processImageToStructure(imageBuffer, doc.mime_type, {
+              mode: req.processingMode ?? "auto",
+              quality: "best",
+            });
 
           await documentDB.exec`
             UPDATE documents 
@@ -41,6 +46,12 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
               document_structure = ${JSON.stringify(structure)},
               updated_at = NOW()
             WHERE id = ${id}
+          `;
+
+          const duration = Date.now() - started;
+          await documentDB.exec`
+            INSERT INTO processing_runs (document_id, mode, ocr_provider, llm_provider, confidence, text_length, duration_ms, status)
+            VALUES (${id}, ${req.processingMode ?? "auto"}, ${ocrProvider}, ${llmProvider ?? null}, ${confidence}, ${text.length}, ${duration}, 'completed')
           `;
 
           if (!req.convertTo) {
@@ -96,6 +107,11 @@ export const batchProcess = api<BatchProcessRequest, BatchProcessResponse>(
             conversion: { outputId: output!.id, downloadUrl: url },
           };
         } catch (err: any) {
+          const duration = Date.now() - started;
+          await documentDB.exec`
+            INSERT INTO processing_runs (document_id, mode, ocr_provider, llm_provider, confidence, text_length, duration_ms, status)
+            VALUES (${id}, ${req.processingMode ?? "auto"}, ${"unknown"}, ${null}, ${null}, ${0}, ${duration}, 'failed')
+          `;
           return {
             documentId: id,
             status: "failed" as const,

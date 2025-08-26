@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Upload, FileImage, AlertCircle, CheckCircle } from "lucide-react";
+import { Upload, FileImage, AlertCircle, CheckCircle, Cog } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { LoadingSpinner } from "./LoadingSpinner";
 import backend from "~backend/client";
@@ -16,6 +17,8 @@ type UploadItem = {
 
 export function UploadZone() {
   const [items, setItems] = useState<UploadItem[]>([]);
+  const [processingMode, setProcessingMode] = useState<"auto" | "local" | "cloud">("auto");
+  const [quality, setQuality] = useState<"fast" | "best">("best");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -52,7 +55,7 @@ export function UploadZone() {
     setTimeout(() => {
       navigate("/documents");
     }, 800);
-  }, [toast, navigate]);
+  }, [toast, navigate, processingMode, quality]);
 
   const handleUpload = async (item: UploadItem) => {
     setItems((prev) => prev.map((it) => (it === item ? { ...it, status: "uploading" } : it)));
@@ -81,7 +84,7 @@ export function UploadZone() {
         prev.map((it) => (it === item ? { ...it, status: "processing", documentId: uploadResponse.documentId } : it))
       );
 
-      await backend.document.process({ documentId: uploadResponse.documentId });
+      await backend.document.process({ documentId: uploadResponse.documentId, mode: processingMode, quality });
 
       setItems((prev) =>
         prev.map((it) => (it === item ? { ...it, status: "done" } : it))
@@ -107,11 +110,44 @@ export function UploadZone() {
     multiple: true,
     maxFiles: 10,
     maxSize: 15 * 1024 * 1024, // 15MB
-    disabled: false,
   });
 
   return (
     <div className="w-full max-w-3xl mx-auto">
+      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Cog className="h-5 w-5 text-gray-600" />
+          <h3 className="font-semibold text-gray-900">Processing Preferences</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm text-gray-600">Mode</label>
+            <Select value={processingMode} onValueChange={(v) => setProcessingMode(v as any)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto</SelectItem>
+                <SelectItem value="local">Secure local</SelectItem>
+                <SelectItem value="cloud">Cloud</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Quality</label>
+            <Select value={quality} onValueChange={(v) => setQuality(v as any)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="best">Best</SelectItem>
+                <SelectItem value="fast">Fast</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
       <div
         {...getRootProps()}
         className={`

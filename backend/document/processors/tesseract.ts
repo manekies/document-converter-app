@@ -5,7 +5,7 @@ import type { DocumentElement, DocumentStructure } from "../types";
 export async function ocrAndStructureFromImage(
   imageBuffer: Buffer,
   opts?: { lang?: string }
-): Promise<{ text: string; structure: DocumentStructure; language: string }> {
+): Promise<{ text: string; structure: DocumentStructure; language: string; confidence: number }> {
   const lang = opts?.lang ?? "eng";
   const res = await Tesseract.recognize(imageBuffer, lang);
   const { text, lines, words } = res.data;
@@ -15,6 +15,17 @@ export async function ocrAndStructureFromImage(
   const height = (res?.data as any)?.image?.height ?? 842;
 
   const elements: DocumentElement[] = [];
+
+  // Compute average confidence
+  let avgConf = 0;
+  let confCount = 0;
+  for (const w of words ?? []) {
+    if (typeof w.confidence === "number") {
+      avgConf += w.confidence;
+      confCount++;
+    }
+  }
+  const confidence = confCount > 0 ? avgConf / confCount : 0;
 
   // Simple heuristic: treat each line as a paragraph, detect headings and lists.
   for (const line of lines ?? []) {
@@ -91,5 +102,5 @@ export async function ocrAndStructureFromImage(
   };
 
   // Language detection is not included by Tesseract; default to 'en'.
-  return { text: text?.trim() ?? "", structure, language: "en" };
+  return { text: text?.trim() ?? "", structure, language: "en", confidence };
 }

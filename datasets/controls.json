@@ -1,0 +1,24 @@
+{
+  "datasets": [
+    {
+      "name": "clean-printed-en",
+      "description": "Clean printed English page with headings/lists",
+      "bucketPath": "controls/clean-printed-en/page1.png",
+      "expected": {
+        "language": "en",
+        "minConfidence": 70,
+        "minElements": 8
+      }
+    },
+    {
+      "name": "photo-lowlight-en",
+      "description": "Phone photo with low light and skew",
+      "bucketPath": "controls/photo-lowlight-en/img1.jpg",
+      "expected": {
+        "language": "en",
+        "minConfidence": 50,
+        "minElements": 5
+      }
+    }
+  ]
+}

@@ -97,6 +97,8 @@ export interface BatchProcessRequest {
   documentIds: string[];
   convertTo?: OutputFormat;
   mode?: "exact" | "editable";
+  // Orchestration mode for processing stage
+  processingMode?: "auto" | "local" | "cloud";
 }
 
 export interface BatchProcessItemResult {

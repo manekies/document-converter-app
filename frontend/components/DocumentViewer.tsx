@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { Download, FileText, Eye, Edit, RefreshCw, Code } from "lucide-react";
+import { Download, FileText, Eye, Edit, RefreshCw, Code, Cog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { ConversionPanel } from "./ConversionPanel";
@@ -17,12 +18,14 @@ interface DocumentViewerProps {
 export function DocumentViewer({ document }: DocumentViewerProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [doc, setDoc] = useState(document);
+  const [processingMode, setProcessingMode] = useState<"auto" | "local" | "cloud">("auto");
+  const [quality, setQuality] = useState<"fast" | "best">("best");
   const { toast } = useToast();
 
   const handleReprocess = async () => {
     setIsProcessing(true);
     try {
-      await backend.document.process({ documentId: doc.id });
+      await backend.document.process({ documentId: doc.id, mode: processingMode, quality });
       toast({
         title: "Reprocessing started",
         description: "Your document is being reprocessed.",
@@ -92,6 +95,28 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
           </div>
           
           <div className="flex items-center space-x-2">
+            <div className="hidden md:flex items-center gap-2 mr-4">
+              <Cog className="h-4 w-4 text-gray-600" />
+              <Select value={processingMode} onValueChange={(v) => setProcessingMode(v as any)}>
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="Mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="local">Secure local</SelectItem>
+                  <SelectItem value="cloud">Cloud</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={quality} onValueChange={(v) => setQuality(v as any)}>
+                <SelectTrigger className="w-24">
+                  <SelectValue placeholder="Quality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="best">Best</SelectItem>
+                  <SelectItem value="fast">Fast</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {doc.processingStatus === "failed" && (
               <Button
                 variant="outline"
@@ -206,14 +231,37 @@ export function DocumentViewer({ document }: DocumentViewerProps) {
           <p className="text-gray-600 mb-6">
             There was an error processing your document. Please try reprocessing or upload a different image.
           </p>
-          <Button onClick={handleReprocess} disabled={isProcessing}>
-            {isProcessing ? (
-              <LoadingSpinner className="h-4 w-4 mr-2" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
-            Try Again
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center gap-2 justify-center">
+            <div className="flex items-center gap-2">
+              <Select value={processingMode} onValueChange={(v) => setProcessingMode(v as any)}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="local">Secure local</SelectItem>
+                  <SelectItem value="cloud">Cloud</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={quality} onValueChange={(v) => setQuality(v as any)}>
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="Quality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="best">Best</SelectItem>
+                  <SelectItem value="fast">Fast</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleReprocess} disabled={isProcessing}>
+              {isProcessing ? (
+                <LoadingSpinner className="h-4 w-4 mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Try Again
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
